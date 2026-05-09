@@ -1,0 +1,78 @@
+---
+# Machine-readable manifest. LLM agents read this first to know what to do.
+# AGENTS.md is the prose playbook; this file is the source of truth for data.
+
+kit:
+  name: hermes-profile-kit
+  version: 1.0.0
+  description: >
+    Drop-in Hermes Agent profile kit. Creates four isolated profiles
+    (coder, assistant, research, community-bot) with separate config,
+    memory, gateway tokens, and personas.
+  upstream_docs: https://hermes-agent.nousresearch.com/docs/user-guide/profiles
+  license: MIT
+
+# Each entry produces one Hermes profile.
+# Agents iterate over this list and follow AGENTS.md Step 2 for each.
+profiles:
+  - name: coder
+    template: profiles/coder
+    role: Full-stack development assistant
+    model_tier: sonnet         # informational; actual model in template config.yaml
+    channels: [cli]
+    requires_secrets:
+      - ANTHROPIC_API_KEY      # or alternate provider key
+    optional_secrets: []
+
+  - name: assistant
+    template: profiles/assistant
+    role: Personal daily assistant
+    model_tier: sonnet
+    channels: [cli, telegram]
+    requires_secrets:
+      - ANTHROPIC_API_KEY
+    optional_secrets:
+      - TELEGRAM_BOT_TOKEN
+
+  - name: research
+    template: profiles/research
+    role: Deep research with web search and citations
+    model_tier: opus
+    channels: [cli]
+    requires_secrets:
+      - ANTHROPIC_API_KEY
+    optional_secrets:
+      - BRAVE_SEARCH_API_KEY
+      - EXA_API_KEY
+
+  - name: community-bot
+    template: profiles/community-bot
+    role: Korean dev community helper bot (cheap & friendly)
+    model_tier: haiku
+    channels: [telegram, discord]
+    requires_secrets:
+      - ANTHROPIC_API_KEY
+    optional_secrets:
+      - TELEGRAM_BOT_TOKEN
+      - DISCORD_BOT_TOKEN
+
+# Files an agent should never overwrite once they exist.
+preserve_existing:
+  - ".env"
+
+# Files an agent should always overwrite from the template on each install.
+overwrite_from_template:
+  - "SOUL.md"
+  - "config.yaml"
+
+# Verification commands. Agents run these after install.
+verification:
+  - cmd: "hermes profile list"
+    expect: "all four profile names appear"
+  - cmd: "hermes -p {profile} doctor"
+    expect: "exit 0 with no MISSING lines for required providers"
+    per_profile: true
+
+# Hermes version this kit was authored against. Older versions may not
+# support all flags; agents should warn if hermes --version reports < this.
+min_hermes_version: "0.12.0"

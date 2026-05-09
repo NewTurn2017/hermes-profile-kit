@@ -1,0 +1,43 @@
+# Hermes profile config — community-bot
+# High-volume, low-cost. Haiku-class. Telegram + Discord channels.
+
+model:
+  default: anthropic/claude-haiku-4-5
+
+auxiliary:
+  default: anthropic/claude-haiku-4-5
+  # Same as primary — keep cost down.
+
+terminal:
+  backend: local
+
+tools:
+  enabled:
+    - web_search
+    - web_fetch
+    - file
+  disabled:
+    - shell           # bot should not execute arbitrary commands
+    - image_generation
+    - voice
+
+# Approval flow: bot draft -> user (admin) confirms -> bot sends.
+# In community context, lean toward auto-send for FAQ answers.
+gateway:
+  approval_required:
+    - delete
+    - mass_message    # any message addressed to >5 people at once
+
+# Rate limiting to control costs.
+rate_limit:
+  per_user_per_hour: 30
+  per_channel_per_hour: 200
+
+# Memory: lighter retention. Bot doesn't need to remember every interaction.
+memory:
+  built_in:
+    nudge_interval_turns: 30   # less frequent than coder/assistant
+    max_facts: 200             # cap to avoid bloat
+
+display:
+  tool_preview_length: 60

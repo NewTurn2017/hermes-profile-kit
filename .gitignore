@@ -1,0 +1,25 @@
+# Never commit secrets
+.env
+*.env
+!.env.example
+
+# Local state — should never end up in this repo
+.hermes/
+hermes-backups/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/
+
+# Logs
+*.log
+/tmp/
+
+# Backup archives
+*.tar.gz
+*.zip
+*.bak

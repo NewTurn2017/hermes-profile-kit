@@ -1,0 +1,32 @@
+# Hermes profile config — research
+# Heavy web search, longer context, opus-class reasoning.
+
+model:
+  default: anthropic/claude-opus-4-7
+
+auxiliary:
+  default: anthropic/claude-sonnet-4-6
+  # Research uses auxiliary heavily for web summarization. Don't pick haiku.
+
+terminal:
+  backend: local
+
+tools:
+  enabled:
+    - web_search
+    - web_fetch
+    - file           # for saving reports
+  disabled:
+    - shell          # no terminal commands needed for research
+
+# Research sessions are typically long. Increase context budget.
+context:
+  target_tokens: 150000
+  compression_threshold: 0.85
+
+# Save synthesized reports here by convention.
+output:
+  reports_dir: ~/Documents/research-reports
+
+display:
+  tool_preview_length: 200

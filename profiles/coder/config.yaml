@@ -1,0 +1,40 @@
+# Hermes profile config — coder
+# This file is overwritten by the kit on every install. Edit the template
+# at profiles/coder/config.yaml in the repo if you want changes to persist.
+
+model:
+  default: anthropic/claude-sonnet-4-6
+  # Fallback chain when primary hits a rate limit or fails.
+  # Set fallbacks via `hermes -p coder model` (interactive).
+
+# Auxiliary model (vision, summarization, memory flush, web fetch).
+# Cheaper than the main model; falls back to main if not set.
+auxiliary:
+  default: anthropic/claude-haiku-4-5
+
+terminal:
+  backend: local
+  # Set this to your main code workspace if you want `coder` to start there
+  # by default. Use an absolute path. Leave commented to use the launch dir.
+  # cwd: /Users/you/code
+
+# Tool config — keep this profile focused on code.
+tools:
+  enabled:
+    - file
+    - shell
+    - web_search
+    - web_fetch
+  disabled:
+    - image_generation   # not needed for coding
+    - voice
+
+# Display tweaks for terminal use.
+display:
+  tool_preview_length: 120
+
+# Memory: keep prompt cache friendly. Built-in memory is always on;
+# external provider is opt-in via `hermes -p coder memory setup`.
+memory:
+  built_in:
+    nudge_interval_turns: 10

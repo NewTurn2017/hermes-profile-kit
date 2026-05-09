@@ -1,0 +1,37 @@
+# Hermes profile config — assistant
+# Personal daily assistant. CLI + optional Telegram gateway.
+
+model:
+  default: anthropic/claude-sonnet-4-6
+
+auxiliary:
+  default: anthropic/claude-haiku-4-5
+
+terminal:
+  backend: local
+
+tools:
+  enabled:
+    - file
+    - shell
+    - web_search
+    - web_fetch
+    - cron           # scheduling reminders
+  disabled:
+    - image_generation
+
+# Cron jobs run from this profile context.
+cron:
+  enabled: true
+
+# Gateway: only Telegram by default. Discord/Slack tokens in .env will
+# be auto-picked up if added later.
+gateway:
+  approval_required:
+    # Actions that need user confirmation before execution.
+    - send_message
+    - schedule_event
+    - delete
+
+display:
+  tool_preview_length: 80

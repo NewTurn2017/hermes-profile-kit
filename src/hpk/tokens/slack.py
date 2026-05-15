@@ -1,3 +1,5 @@
+import re as _re
+
 from hpk.tokens.base import TokenHandler, ValidationResult
 
 
@@ -41,7 +43,27 @@ class SlackAppHandler:
         return ValidationResult(True)
 
 
+class SlackSigningSecretHandler:
+    key = "SLACK_SIGNING_SECRET"
+    provider = "slack"
+    docs_url = "https://api.slack.com/apps"
+
+    def intro(self) -> str:
+        return (
+            "Slack App Signing Secret (32-char hex string).\n"
+            f"  1. {self.docs_url} → your app → 'Basic Information'\n"
+            "  2. Under 'App Credentials' → Signing Secret → click 'Show'\n"
+            "  3. Copy and paste below."
+        )
+
+    def validate(self, value: str) -> ValidationResult:
+        if not _re.fullmatch(r"[a-f0-9]{32}", value):
+            return ValidationResult(False, "expected 32-char lowercase hex string")
+        return ValidationResult(True)
+
+
 WIZARDS: dict[str, TokenHandler] = {
     "slack_bot": SlackBotHandler(),
     "slack_app": SlackAppHandler(),
+    "slack_signing": SlackSigningSecretHandler(),
 }

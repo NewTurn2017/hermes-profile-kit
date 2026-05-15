@@ -47,7 +47,7 @@ jobs:
             --old-sha "$(jq -r '.upstream.pinned_commit' manifest.yaml 2>/dev/null || echo old)" \
             --new-sha "$SHA" \
             --out build/drift_report.md
-      - uses: peter-evans/create-pull-request@v6
+      - uses: peter-evans/create-pull-request@v8
         with:
           title: "upstream sync: hermes-agent@${{ env.SHA }}"
           body-path: build/drift_report.md

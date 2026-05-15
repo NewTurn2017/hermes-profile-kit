@@ -83,3 +83,46 @@ def test_phase_b_required_token_written(fake_hermes, tmp_path, monkeypatch):
     wizard.phase_b_tokens(profile)
     contents = (home / ".env").read_text()
     assert "ANTHROPIC_API_KEY=sk-ant-test-" in contents
+
+
+def test_phase_c_runs_recommended_plugin(fake_hermes, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    from hpk.manifest import (
+        KitMeta,
+        Manifest,
+        Plugin,
+        Profile,
+        RecommendedPlugin,
+        Upstream,
+    )
+
+    m = Manifest(
+        schema_version=2,
+        kit=KitMeta(name="k", version="v", license="MIT"),
+        upstream=Upstream(repo="r", pinned_commit="c", pinned_version="0.12.3", verified_at="t"),
+        min_hermes_version="0.12.0",
+        profiles=[
+            Profile(
+                name="research",
+                template="/tmp",
+                role="r",
+                model_tier="opus",
+                channels=["cli"],
+                recommended_plugins=[RecommendedPlugin(id="honcho", default=True)],
+            ),
+        ],
+        plugins={
+            "honcho": Plugin(
+                description="d",
+                upstream_command="hermes -p {profile} memory setup honcho",
+                verified_in_upstream=True,
+            )
+        },
+        preserve_existing=[".env"],
+        overwrite_from_template=["SOUL.md", "config.yaml"],
+    )
+    monkeypatch.setattr("hpk.wizard._ask_plugin", lambda plugin_id, default: True)
+    from hpk.wizard import phase_c_plugins
+
+    phase_c_plugins(m.profiles[0], m.plugins)
+    assert ["hermes", "-p", "research", "memory", "setup", "honcho"] in fake_hermes.calls

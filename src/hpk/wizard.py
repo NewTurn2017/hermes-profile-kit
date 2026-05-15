@@ -9,7 +9,8 @@ import questionary
 from packaging.version import Version
 
 from hpk import hermes, profiles, tokens, ui
-from hpk.manifest import Manifest, Profile, TokenSpec
+from hpk import plugins as plugins_mod
+from hpk.manifest import Manifest, Plugin, Profile, TokenSpec
 
 
 class PreflightError(RuntimeError):
@@ -106,3 +107,45 @@ def phase_b_tokens(profile: Profile) -> None:
         if val:
             profiles.set_env_key(env_path, spec.key, val)
             ui.ok(f"{spec.key} written")
+
+
+def _ask_plugin(plugin_id: str, default: bool) -> bool:
+    return bool(questionary.confirm(f"Enable plugin '{plugin_id}'?", default=default).ask())
+
+
+def phase_c_plugins(profile: Profile, plugins_catalog: dict[str, Plugin]) -> None:
+    if not profile.recommended_plugins:
+        return
+    ui.step(f"[C] plugins — {profile.name}")
+    for rp in profile.recommended_plugins:
+        plugin = plugins_catalog.get(rp.id)
+        if plugin is None or not plugin.verified_in_upstream:
+            ui.warn(f"plugin {rp.id} not verified — skipping")
+            continue
+        if not _ask_plugin(rp.id, rp.default):
+            ui.ok(f"plugin {rp.id} skipped by user")
+            continue
+        try:
+            plugins_mod.run_plugin(plugin, profile=profile.name)
+            ui.ok(f"plugin {rp.id} enabled")
+        except plugins_mod.PluginExecError as e:
+            ui.warn(f"plugin {rp.id} failed: {e}")
+
+
+def run_wizard(
+    manifest: Manifest,
+    *,
+    targets: list[str],
+    force: bool,
+    skip_tokens: bool,
+    skip_plugins: bool,
+) -> None:
+    preflight(manifest)
+    selected = [p for p in manifest.profiles if not targets or p.name in targets]
+    for profile in selected:
+        ui.header(f"profile {profile.name}")
+        phase_a_base(profile, force=force)
+        if not skip_tokens:
+            phase_b_tokens(profile)
+        if not skip_plugins:
+            phase_c_plugins(profile, manifest.plugins)

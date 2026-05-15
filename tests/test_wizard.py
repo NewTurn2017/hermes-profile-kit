@@ -126,3 +126,92 @@ def test_phase_c_runs_recommended_plugin(fake_hermes, tmp_path, monkeypatch):
 
     phase_c_plugins(m.profiles[0], m.plugins)
     assert ["hermes", "-p", "research", "memory", "setup", "honcho"] in fake_hermes.calls
+
+
+def test_phase_b_uses_token_default_on_empty_input(fake_hermes, tmp_path, monkeypatch):
+    """When user presses Enter (empty string), wizard writes token_spec.default."""
+    home = tmp_path / ".hermes/profiles/seb"
+    home.mkdir(parents=True)
+    (home / ".env").write_text("OPENAI_API_KEY=FILL_IN_OPENAI_API_KEY\n")
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    from hpk.manifest import Profile, TokenSpec, TokensSection
+    from hpk import wizard
+    from hpk.tokens.base import TokenHandler, ValidationResult
+
+    class _FakeCodexKeyHandler:
+        key = "OPENAI_API_KEY"
+        provider = "openai-codex"
+        docs_url = ""
+
+        def intro(self) -> str:
+            return ""
+
+        def validate(self, value: str) -> ValidationResult:
+            return ValidationResult(True)
+
+    import hpk.tokens as _tokens_mod
+    monkeypatch.setitem(_tokens_mod._BY_WIZARD, "codex_api_key", _FakeCodexKeyHandler())
+
+    profile = Profile(
+        name="seb",
+        template="/tmp",
+        role="second brain",
+        model_tier="openai-codex",
+        channels=["slack"],
+        tokens=TokensSection(
+            required=[
+                TokenSpec(
+                    key="OPENAI_API_KEY",
+                    provider="openai-codex",
+                    wizard="codex_api_key",
+                    default="sk-codex-proxy-local",
+                )
+            ]
+        ),
+    )
+    # Empty input — user presses Enter
+    monkeypatch.setattr(wizard, "_prompt_secret", lambda intro, key: "")
+    wizard.phase_b_tokens(profile)
+
+    contents = (home / ".env").read_text()
+    assert "OPENAI_API_KEY=sk-codex-proxy-local" in contents
+
+
+def test_phase_c_kit_local_plugin_prints_instructions(fake_hermes, tmp_path, monkeypatch, capsys):
+    """Kit-local plugins (install_path, not verified) should print instructions, not exec."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    from hpk.manifest import (
+        KitMeta,
+        Manifest,
+        Plugin,
+        Profile,
+        RecommendedPlugin,
+        Upstream,
+        TokensSection,
+    )
+    from hpk import wizard
+
+    plugin = Plugin(
+        description="local proxy",
+        upstream_command=None,
+        install_path="scripts/codex-openai-proxy",
+        launchd_template="scripts/codex-openai-proxy/launchd.plist.example",
+        verified_in_upstream=False,
+        docs="scripts/codex-openai-proxy/README.md",
+    )
+    profile = Profile(
+        name="seb",
+        template="/tmp",
+        role="second brain",
+        model_tier="openai-codex",
+        channels=["slack"],
+        tokens=TokensSection(),
+        recommended_plugins=[RecommendedPlugin(id="codex-openai-proxy", default=True)],
+    )
+    # User says "yes" to installing
+    monkeypatch.setattr("questionary.confirm", lambda msg, default=True: type("A", (), {"ask": lambda self: True})())
+    wizard.phase_c_plugins(profile, {"codex-openai-proxy": plugin})
+
+    # Should NOT raise; should NOT call hermes
+    assert not any("hermes" in str(call) for call in fake_hermes.calls)

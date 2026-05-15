@@ -78,17 +78,17 @@ def _collect_one(token_spec: TokenSpec, *, optional: bool) -> str | None:
             f"Set up {token_spec.provider} ({token_spec.key}) now?", default=False
         ).ask()
         if not proceed:
-            return None
+            return token_spec.default  # return default instead of None
     for attempt in range(3):
         value = _prompt_secret(handler.intro(), token_spec.key)
         if not value:
-            return None
+            return token_spec.default  # return default instead of None
         r = handler.validate(value)
         if r.ok:
             return value
         ui.warn(f"validation failed: {r.reason} (attempt {attempt + 1}/3)")
     ui.warn("3 failed validations — skipping")
-    return None
+    return token_spec.default  # return default instead of None
 
 
 def phase_b_tokens(profile: Profile) -> None:
@@ -119,7 +119,24 @@ def phase_c_plugins(profile: Profile, plugins_catalog: dict[str, Plugin]) -> Non
     ui.step(f"[C] plugins — {profile.name}")
     for rp in profile.recommended_plugins:
         plugin = plugins_catalog.get(rp.id)
-        if plugin is None or not plugin.verified_in_upstream:
+        if plugin is None:
+            ui.warn(f"plugin {rp.id} not found in catalog — skipping")
+            continue
+
+        # Kit-local helper: print install path, never exec hermes.
+        if plugin.install_path and not plugin.verified_in_upstream:
+            if _ask_plugin(rp.id, rp.default):
+                ui.warn(
+                    f"plugin [bold]{rp.id}[/bold] is a kit-local helper. "
+                    f"Install manually: see [cyan]{plugin.install_path}/README.md[/cyan]"
+                )
+                if plugin.launchd_template:
+                    ui.console.print(f"  launchd template: {plugin.launchd_template}")
+            else:
+                ui.ok(f"plugin {rp.id} skipped by user")
+            continue
+
+        if not plugin.verified_in_upstream:
             ui.warn(f"plugin {rp.id} not verified — skipping")
             continue
         if not _ask_plugin(rp.id, rp.default):

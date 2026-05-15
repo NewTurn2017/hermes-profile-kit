@@ -1,0 +1,46 @@
+# Hermes profile config — seb (Second Brain)
+# Slack-only personal second-brain controller.
+# Model: gpt-5.5 via local Codex CLI OAuth proxy (OPENAI_BASE_URL override).
+
+model:
+  default: openai/gpt-5.5
+
+auxiliary:
+  default: openai/gpt-5.4-mini
+
+terminal:
+  backend: local
+
+tools:
+  enabled:
+    - file
+    - shell
+    - web_search
+    - web_fetch
+  disabled:
+    - image_generation
+    - voice
+    - cron
+
+gateway:
+  approval_required:
+    - delete
+    - move
+    - mass_message
+    - send_message
+
+concurrency:
+  per_thread: 1
+  per_profile: 3
+
+rate_limit:
+  per_user_per_hour: 60
+  per_channel_per_hour: 120
+
+memory:
+  built_in:
+    nudge_interval_turns: 20
+    max_facts: 300
+
+display:
+  tool_preview_length: 100

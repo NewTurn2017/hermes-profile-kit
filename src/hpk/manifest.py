@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 
 class ManifestValidationError(ValueError):
@@ -77,11 +77,6 @@ class Manifest(BaseModel):
     preserve_existing: list[str]
     overwrite_from_template: list[str]
 
-    @field_validator("min_hermes_version", "upstream")
-    @classmethod
-    def _strip_leading_v(cls, v: object) -> object:
-        return v
-
     @model_validator(mode="after")
     def _cross_field(self) -> Manifest:
         from packaging.version import Version
@@ -100,5 +95,5 @@ def load_manifest(path: Path) -> Manifest:
     try:
         data = yaml.safe_load(path.read_text())
         return Manifest.model_validate(data)
-    except (ValidationError, ValueError) as e:
+    except (ValidationError, ValueError, yaml.YAMLError) as e:
         raise ManifestValidationError(str(e)) from e

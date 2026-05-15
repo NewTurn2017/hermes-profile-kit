@@ -66,3 +66,10 @@ def test_unknown_plugin_id_referenced(tmp_path):
     )
     with pytest.raises(ManifestValidationError, match="unknown plugin"):
         load_manifest(write(tmp_path, bad))
+
+
+def test_yaml_syntax_error_raises_manifest_error(tmp_path):
+    bad = tmp_path / "manifest.yaml"
+    bad.write_text("schema_version: 2\n  : bad\n")
+    with pytest.raises(ManifestValidationError):
+        load_manifest(bad)

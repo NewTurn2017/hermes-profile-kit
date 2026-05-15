@@ -1,78 +1,81 @@
----
-# Machine-readable manifest. LLM agents read this first to know what to do.
-# AGENTS.md is the prose playbook; this file is the source of truth for data.
-
+schema_version: 2
 kit:
   name: hermes-profile-kit
-  version: 1.0.0
-  description: >
-    Drop-in Hermes Agent profile kit. Creates four isolated profiles
-    (coder, assistant, research, community-bot) with separate config,
-    memory, gateway tokens, and personas.
-  upstream_docs: https://hermes-agent.nousresearch.com/docs/user-guide/profiles
+  version: 2.0.0
   license: MIT
 
-# Each entry produces one Hermes profile.
-# Agents iterate over this list and follow AGENTS.md Step 2 for each.
+upstream:                            # CI-managed; humans don't edit
+  repo: https://github.com/NousResearch/hermes-agent
+  pinned_commit: "5621fc44"
+  pinned_version: "0.12.3"
+  verified_at: "2026-05-15T09:49Z"
+
+min_hermes_version: "0.12.0"
+
 profiles:
   - name: coder
     template: profiles/coder
     role: Full-stack development assistant
-    model_tier: sonnet         # informational; actual model in template config.yaml
+    model_tier: sonnet
     channels: [cli]
-    requires_secrets:
-      - ANTHROPIC_API_KEY      # or alternate provider key
-    optional_secrets: []
+    tokens:
+      required:
+        - { key: ANTHROPIC_API_KEY, provider: anthropic }
+      optional: []
+    recommended_plugins: []
 
   - name: assistant
     template: profiles/assistant
     role: Personal daily assistant
     model_tier: sonnet
     channels: [cli, telegram]
-    requires_secrets:
-      - ANTHROPIC_API_KEY
-    optional_secrets:
-      - TELEGRAM_BOT_TOKEN
+    tokens:
+      required:
+        - { key: ANTHROPIC_API_KEY, provider: anthropic }
+      optional:
+        - { key: TELEGRAM_BOT_TOKEN, provider: telegram, wizard: telegram_botfather }
+    recommended_plugins:
+      - { id: honcho-memory, default: true }
 
   - name: research
     template: profiles/research
     role: Deep research with web search and citations
     model_tier: opus
     channels: [cli]
-    requires_secrets:
-      - ANTHROPIC_API_KEY
-    optional_secrets:
-      - BRAVE_SEARCH_API_KEY
-      - EXA_API_KEY
+    tokens:
+      required:
+        - { key: ANTHROPIC_API_KEY, provider: anthropic }
+      optional:
+        - { key: BRAVE_SEARCH_API_KEY, provider: brave }
+        - { key: EXA_API_KEY, provider: exa }
+    recommended_plugins:
+      - { id: honcho-memory, default: true }
+      - { id: brave-search-tool, default: true }
 
   - name: community-bot
     template: profiles/community-bot
-    role: Korean dev community helper bot (cheap & friendly)
+    role: Korean dev community helper bot
     model_tier: haiku
     channels: [telegram, discord]
-    requires_secrets:
-      - ANTHROPIC_API_KEY
-    optional_secrets:
-      - TELEGRAM_BOT_TOKEN
-      - DISCORD_BOT_TOKEN
+    tokens:
+      required:
+        - { key: ANTHROPIC_API_KEY, provider: anthropic }
+      optional:
+        - { key: TELEGRAM_BOT_TOKEN, provider: telegram, wizard: telegram_botfather }
+        - { key: DISCORD_BOT_TOKEN,  provider: discord,  wizard: discord_devportal }
+    recommended_plugins: []
 
-# Files an agent should never overwrite once they exist.
-preserve_existing:
-  - ".env"
+plugins:
+  honcho-memory:
+    description: "External long-term memory via Honcho (Plastic Labs). Default Hermes external memory provider."
+    upstream_command: "hermes -p {profile} memory setup honcho"
+    verified_in_upstream: true       # CI-managed
+    docs: https://honcho.dev
+  brave-search-tool:
+    description: "Web search tool backed by Brave Search API"
+    upstream_command: "hermes -p {profile} tools enable web_search"
+    verified_in_upstream: true
+    docs: https://brave.com/search/api/
 
-# Files an agent should always overwrite from the template on each install.
-overwrite_from_template:
-  - "SOUL.md"
-  - "config.yaml"
-
-# Verification commands. Agents run these after install.
-verification:
-  - cmd: "hermes profile list"
-    expect: "all four profile names appear"
-  - cmd: "hermes -p {profile} doctor"
-    expect: "exit 0 with no MISSING lines for required providers"
-    per_profile: true
-
-# Hermes version this kit was authored against. Older versions may not
-# support all flags; agents should warn if hermes --version reports < this.
-min_hermes_version: "0.12.0"
+preserve_existing:  [".env"]
+overwrite_from_template: ["SOUL.md", "config.yaml"]

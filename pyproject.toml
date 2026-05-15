@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-profile-kit"
+version = "2.0.0"
+description = "Interactive multi-profile setup utility for Hermes Agent"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "NewTurn2017" }]
+dependencies = [
+  "click>=8.1",
+  "questionary>=2.0",
+  "rich>=13",
+  "pyyaml>=6",
+  "pydantic>=2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-mock>=3", "ruff>=0.5", "mypy>=1.10", "types-PyYAML"]
+
+[project.scripts]
+hpk = "hpk.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+hpk = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]
+
+[tool.mypy]
+strict = true
+files = ["src/hpk"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"

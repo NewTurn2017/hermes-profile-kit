@@ -23,3 +23,14 @@ Thumbs.db
 *.tar.gz
 *.zip
 *.bak
+
+# Python build / tooling artefacts (v2)
+build/
+dist/
+*.egg-info/
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+manifest.v1.yaml.bak

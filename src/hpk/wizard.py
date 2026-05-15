@@ -5,10 +5,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import questionary
 from packaging.version import Version
 
-from hpk import hermes, ui
-from hpk.manifest import Manifest
+from hpk import hermes, profiles, tokens, ui
+from hpk.manifest import Manifest, Profile, TokenSpec
 
 
 class PreflightError(RuntimeError):
@@ -34,3 +35,74 @@ def preflight(manifest: Manifest) -> None:
     else:
         ui.ok("~/.local/bin on PATH")
     ui.ok(f"manifest verified (pinned to {manifest.upstream.pinned_commit})")
+
+
+def phase_a_base(profile: Profile, *, force: bool) -> None:
+    ui.step(f"[A] base — {profile.name}")
+    if not hermes.profile_exists(profile.name):
+        hermes.run_profile_create(profile.name)
+        ui.ok(f"hermes profile create {profile.name}")
+    else:
+        ui.ok(f"profile '{profile.name}' already exists — skip create")
+
+    home = profiles.profile_home(profile.name)
+    home.mkdir(parents=True, exist_ok=True)
+    profiles.apply_templates(
+        template_dir=Path(profile.template),
+        profile_home=home,
+        force=force,
+    )
+    ui.ok("templates applied (SOUL.md, config.yaml)")
+    seeded = profiles.seed_env_if_absent(
+        template=Path(profile.template) / ".env.example",
+        target=home / ".env",
+    )
+    ui.ok(".env seeded" if seeded else ".env preserved")
+
+
+def _prompt_secret(intro: str, key: str) -> str:
+    ui.console.print(intro)
+    answer = questionary.password(f"  {key}").ask()
+    return str(answer) if answer else ""
+
+
+def _collect_one(token_spec: TokenSpec, *, optional: bool) -> str | None:
+    handler = (
+        tokens.get_handler(provider=token_spec.provider, wizard=token_spec.wizard)
+        if token_spec.wizard
+        else tokens.get_handler(provider=token_spec.provider)
+    )
+    if optional:
+        proceed = questionary.confirm(
+            f"Set up {token_spec.provider} ({token_spec.key}) now?", default=False
+        ).ask()
+        if not proceed:
+            return None
+    for attempt in range(3):
+        value = _prompt_secret(handler.intro(), token_spec.key)
+        if not value:
+            return None
+        r = handler.validate(value)
+        if r.ok:
+            return value
+        ui.warn(f"validation failed: {r.reason} (attempt {attempt + 1}/3)")
+    ui.warn("3 failed validations — skipping")
+    return None
+
+
+def phase_b_tokens(profile: Profile) -> None:
+    ui.step(f"[B] tokens — {profile.name}")
+    home = profiles.profile_home(profile.name)
+    env_path = home / ".env"
+    for spec in profile.tokens.required:
+        val = _collect_one(spec, optional=False)
+        if val:
+            profiles.set_env_key(env_path, spec.key, val)
+            ui.ok(f"{spec.key} written")
+        else:
+            ui.warn(f"{spec.key} left as FILL_IN")
+    for spec in profile.tokens.optional:
+        val = _collect_one(spec, optional=True)
+        if val:
+            profiles.set_env_key(env_path, spec.key, val)
+            ui.ok(f"{spec.key} written")

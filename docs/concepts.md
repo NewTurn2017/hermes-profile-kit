@@ -11,6 +11,8 @@ Internally, every Hermes path lookup goes through `get_hermes_home()`, which rea
 
 ## What is scoped per profile
 
+> **Implementation note**: The exact filenames below (e.g. `MEMORY.md`, `state.db`) reflect Hermes' internal layout. They are accurate against the upstream commit pinned in `manifest.yaml` (`upstream.pinned_commit`). For canonical guarantees, see Hermes' own docs at https://hermes-agent.nousresearch.com/.
+
 | Item | Path inside profile home |
 |------|--------------------------|
 | Config | `config.yaml` |

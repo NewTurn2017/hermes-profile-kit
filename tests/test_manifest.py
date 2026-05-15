@@ -124,8 +124,10 @@ profiles:
     tokens:
       required:
         - { key: SLACK_BOT_TOKEN, provider: slack, wizard: slack_bot }
-        - { key: OPENAI_BASE_URL, provider: openai-codex, wizard: codex_base_url, default: "http://localhost:8765/v1" }
-        - { key: OPENAI_API_KEY,  provider: openai-codex, wizard: codex_api_key,  default: "sk-codex-proxy-local" }
+        - { key: OPENAI_BASE_URL, provider: openai-codex,
+            wizard: codex_base_url, default: "http://localhost:8765/v1" }
+        - { key: OPENAI_API_KEY, provider: openai-codex,
+            wizard: codex_api_key, default: "sk-codex-proxy-local" }
       optional: []
     recommended_plugins:
       - { id: codex-openai-proxy, default: true }

@@ -1,4 +1,4 @@
-"""Manifest v2 schema, loader, and validator."""
+"""Manifest schema (v2 / v3), loader, and validator."""
 
 from __future__ import annotations
 

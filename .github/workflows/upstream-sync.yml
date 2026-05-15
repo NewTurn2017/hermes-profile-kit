@@ -1,0 +1,55 @@
+name: upstream-sync
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Snapshot old index
+        run: cp -f build/cmd_index.json build/cmd_index.old.json 2>/dev/null || echo "[]" > build/cmd_index.old.json
+      - name: Clone upstream
+        run: |
+          git clone --depth=1 https://github.com/NousResearch/hermes-agent.git /tmp/upstream
+          cd /tmp/upstream && echo "SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+      - name: Install
+        run: |
+          pip install /tmp/upstream
+          pip install -e ".[dev]"
+      - name: Get upstream version
+        run: |
+          VER=$(hermes --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | tr -d v)
+          echo "VERSION=$VER" >> "$GITHUB_ENV"
+      - name: Regen
+        run: |
+          python scripts/regen_docs.py \
+            --upstream /tmp/upstream \
+            --out build/cmd_index.json \
+            --docs docs/commands.md \
+            --pinned-commit "$SHA"
+      - name: Update manifest pin
+        run: |
+          python scripts/update_manifest_pin.py \
+            --commit "$SHA" \
+            --version "$VERSION" \
+            --verified-at "$(date -u +%Y-%m-%dT%H:%MZ)"
+      - name: Drift report
+        run: |
+          python scripts/drift_report.py \
+            --old-index build/cmd_index.old.json \
+            --new-index build/cmd_index.json \
+            --old-sha "$(jq -r '.upstream.pinned_commit' manifest.yaml 2>/dev/null || echo old)" \
+            --new-sha "$SHA" \
+            --out build/drift_report.md
+      - uses: peter-evans/create-pull-request@v6
+        with:
+          title: "upstream sync: hermes-agent@${{ env.SHA }}"
+          body-path: build/drift_report.md
+          branch: upstream-sync/auto
+          commit-message: "chore(sync): hermes-agent@${{ env.SHA }} (${{ env.VERSION }})"

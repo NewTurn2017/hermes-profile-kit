@@ -73,3 +73,34 @@ def test_yaml_syntax_error_raises_manifest_error(tmp_path):
     bad.write_text("schema_version: 2\n  : bad\n")
     with pytest.raises(ManifestValidationError):
         load_manifest(bad)
+
+
+V1_YAML = """\
+kit:
+  name: hermes-profile-kit
+  version: 1.0.0
+  description: drop-in kit
+profiles:
+  - name: coder
+    template: profiles/coder
+    role: dev
+    model_tier: sonnet
+    channels: [cli]
+    requires_secrets: [ANTHROPIC_API_KEY]
+    optional_secrets: []
+min_hermes_version: 0.12.0
+"""
+
+
+def test_migrate_v1_to_v2(tmp_path):
+    from hpk.manifest import migrate_v1_yaml
+
+    out = migrate_v1_yaml(
+        V1_YAML,
+        pinned_commit="abc1234",
+        pinned_version="0.12.3",
+        verified_at="2026-05-15T09:49Z",
+    )
+    assert out["schema_version"] == 2
+    assert out["profiles"][0]["tokens"]["required"][0]["key"] == "ANTHROPIC_API_KEY"
+    assert out["plugins"] == {}

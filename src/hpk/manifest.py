@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -97,3 +97,52 @@ def load_manifest(path: Path) -> Manifest:
         return Manifest.model_validate(data)
     except (ValidationError, ValueError, yaml.YAMLError) as e:
         raise ManifestValidationError(str(e)) from e
+
+
+def migrate_v1_yaml(
+    v1_text: str,
+    *,
+    pinned_commit: str,
+    pinned_version: str,
+    verified_at: str,
+) -> dict[str, Any]:
+    """Return a v2 manifest dict built from a v1 manifest YAML string."""
+    src = yaml.safe_load(v1_text)
+    profiles_out = []
+    for p in src.get("profiles", []):
+        required = [
+            {"key": k, "provider": k.split("_")[0].lower()} for k in p.get("requires_secrets", [])
+        ]
+        optional = [
+            {"key": k, "provider": k.split("_")[0].lower()} for k in p.get("optional_secrets", [])
+        ]
+        profiles_out.append(
+            {
+                "name": p["name"],
+                "template": p["template"],
+                "role": p["role"],
+                "model_tier": p["model_tier"],
+                "channels": p.get("channels", ["cli"]),
+                "tokens": {"required": required, "optional": optional},
+                "recommended_plugins": [],
+            }
+        )
+    return {
+        "schema_version": 2,
+        "kit": {
+            "name": src["kit"]["name"],
+            "version": "2.0.0",
+            "license": src.get("kit", {}).get("license", "MIT"),
+        },
+        "upstream": {
+            "repo": "https://github.com/NousResearch/hermes-agent",
+            "pinned_commit": pinned_commit,
+            "pinned_version": pinned_version,
+            "verified_at": verified_at,
+        },
+        "min_hermes_version": src.get("min_hermes_version", "0.12.0"),
+        "profiles": profiles_out,
+        "plugins": {},
+        "preserve_existing": [".env"],
+        "overwrite_from_template": ["SOUL.md", "config.yaml"],
+    }

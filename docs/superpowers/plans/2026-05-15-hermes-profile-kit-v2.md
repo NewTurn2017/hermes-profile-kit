@@ -4,11 +4,31 @@
 
 **Goal:** Rebuild hermes-profile-kit as a Python CLI (`hpk`) that interactively configures four isolated Hermes profiles, with daily upstream-sync drift detection and codegen-enforced "no unverified hermes commands."
 
-**Architecture:** `hpk` is a Click CLI that orchestrates `hermes` via subprocess. Manifest v2 (pydantic-validated) drives both wizard prompts and CI codegen. A `scripts/regen_docs.py` walks the upstream Click tree to produce `build/cmd_index.json` + `docs/commands.md`; CI fails if anything `hpk` references is missing from the index. A GitHub Actions cron pulls upstream daily and opens a PR on drift.
+**Architecture:** `hpk` is a Click CLI that orchestrates `hermes` via subprocess. Manifest v2 (pydantic-validated) drives both wizard prompts and CI codegen. A `scripts/regen_docs.py` statically AST-parses the upstream `hermes_cli/main.py` argparse tree (see "Amendment 2026-05-15" below) to produce `build/cmd_index.json` + `docs/commands.md`; CI fails if anything `hpk` references is missing from the index. A GitHub Actions cron pulls upstream daily and opens a PR on drift.
 
 **Tech Stack:** Python 3.10+, Click 8, questionary 2, rich 13, pyyaml 6, pydantic 2, pytest, ruff, mypy. Upstream tracked at `/Users/genie/dev/learn/hermes-agent` (NewTurn2017 fork + NousResearch upstream remote).
 
 **Spec:** `docs/superpowers/specs/2026-05-15-hermes-profile-kit-v2-design.md`
+
+---
+
+## Amendment — 2026-05-15: upstream is argparse, not Click
+
+Verified against `/Users/genie/dev/learn/hermes-agent` HEAD:
+
+- Entry point: `pyproject.toml:115` → `hermes = "hermes_cli.main:main"`.
+- `hermes_cli/main.py` defines `def main()` (line 4441) that builds an `argparse.ArgumentParser` with `subparsers.add_parser(...)` calls inside. There is **no Click `cli` group** importable from `hermes_cli.main`.
+
+**Plan adjustments (apply when Phase 7 begins):**
+
+1. Rename `src/hpk/codegen/click_walker.py` → `src/hpk/codegen/argparse_walker.py` (and `walk_click` → `walk_argparse`). All other Phase 7 file names unchanged.
+2. Replace the walker strategy: instead of importing `hermes_cli.main:cli` and recursing the Click tree, statically AST-parse `hermes_cli/main.py` and collect every `subparsers.add_parser(NAME, ...)` / `<sub>_subparsers.add_parser(NAME, ...)` call. Emit the same flat node shape (`{path, params, help, hidden}`) so downstream `cmd_index.py` / `validate.py` / `regen_docs.py` are unaffected.
+3. Toy fixture in `tests/test_codegen.py` becomes a tiny `argparse`-based `main.py` string (or temp file) rather than a Click group. Spot-check: nested `subparsers.add_parser("create", ...)` and a nested group like `gateway -> run/stop/...` produce the expected `path` values (e.g. `"gateway run"`).
+4. In `scripts/regen_docs.py`, `_import_upstream_root(upstream_path)` becomes `_locate_upstream_main(upstream_path)` returning the `Path` to `hermes_cli/main.py` (no `sys.path` injection, no import). The walker reads the file and AST-parses it.
+5. `params` extraction: parser-level `add_argument("--name", ...)` and subparser-level `add_argument` calls are captured by walking the same AST. Positional vs flag is determined by leading `--` / `-` in the first string literal arg.
+6. Hidden / deprecated: argparse has no `hidden` flag. Treat `help=argparse.SUPPRESS` as `hidden: True`; otherwise `hidden: False`.
+
+The inline code blocks under Task 7.1 / 7.3 below still show the **Click** illustration; the implementer subagent will receive the argparse-AST code in its dispatch prompt rather than copying from the inline blocks. Keep the inline blocks as historical context until Phase 7 ships; do not delete now.
 
 ---
 
@@ -46,7 +66,7 @@ hermes-profile-kit/
 │   │   └── exa.py                                            [NEW]
 │   └── codegen/
 │       ├── __init__.py                                       [NEW]
-│       ├── click_walker.py          walks hermes_cli Click   [NEW]
+│       ├── argparse_walker.py      AST-walks hermes_cli arg [NEW]
 │       ├── cmd_index.py             (de)serialize index      [NEW]
 │       └── validate.py              manifest ↔ index checks  [NEW]
 │
@@ -3033,7 +3053,7 @@ The wizard walks you through 4 profiles (`coder` / `assistant` / `research` / `c
 
 ## How it stays correct
 
-`hpk` never embeds a hermes command that hasn't been observed in the upstream Click tree. CI walks `hermes_cli`'s command tree daily, regenerates `docs/commands.md` and `build/cmd_index.json`, and opens a PR when drift is detected.
+`hpk` never embeds a hermes command that hasn't been observed in the upstream argparse tree. CI AST-parses `hermes_cli/main.py` daily, regenerates `docs/commands.md` and `build/cmd_index.json`, and opens a PR when drift is detected.
 
 ## Profiles
 

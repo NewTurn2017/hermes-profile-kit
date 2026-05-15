@@ -18,6 +18,7 @@ class TokenSpec(BaseModel):
     key: str
     provider: str
     wizard: str | None = None
+    default: str | None = None          # ← new
 
 
 class TokensSection(BaseModel):
@@ -37,7 +38,7 @@ class Profile(BaseModel):
     name: str
     template: str
     role: str
-    model_tier: Literal["haiku", "sonnet", "opus"]
+    model_tier: Literal["haiku", "sonnet", "opus", "openai-codex"]  # ← added openai-codex
     channels: list[str]
     tokens: TokensSection = Field(default_factory=TokensSection)
     recommended_plugins: list[RecommendedPlugin] = Field(default_factory=list)
@@ -46,9 +47,11 @@ class Profile(BaseModel):
 class Plugin(BaseModel):
     model_config = ConfigDict(extra="forbid")
     description: str
-    upstream_command: str
+    upstream_command: str | None = None  # ← was str (non-nullable)
     verified_in_upstream: bool = False
     docs: str | None = None
+    install_path: str | None = None      # ← new (kit-local helper path)
+    launchd_template: str | None = None  # ← new
 
 
 class Upstream(BaseModel):
@@ -68,7 +71,7 @@ class KitMeta(BaseModel):
 
 class Manifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    schema_version: Literal[2]
+    schema_version: Literal[2, 3]        # ← was Literal[2]
     kit: KitMeta
     upstream: Upstream
     min_hermes_version: str

@@ -39,3 +39,43 @@ def test_walk_marks_suppress_as_hidden():
     assert secret["hidden"] is True
     create = next(n for n in nodes if n["path"] == "create")
     assert create["hidden"] is False
+
+
+def test_serialize_roundtrip(tmp_path):
+    from hpk.codegen.cmd_index import dump, load
+
+    nodes = [{"path": "profile create", "params": [], "help": "h", "hidden": False}]
+    p = tmp_path / "i.json"
+    dump(nodes, p)
+    assert load(p) == nodes
+
+
+def test_validate_manifest_against_index():
+    from hpk.codegen.validate import find_missing_commands
+    from hpk.manifest import Plugin
+
+    plugins = {
+        "honcho": Plugin(
+            description="d",
+            upstream_command="hermes -p {profile} memory setup honcho",
+            verified_in_upstream=True,
+        )
+    }
+    index = [{"path": "-p memory setup honcho", "params": [], "help": "", "hidden": False}]
+    missing = find_missing_commands(plugins, index)
+    assert missing == []  # the index contains the matching path (modulo profile substitution)
+
+
+def test_validate_detects_missing():
+    from hpk.codegen.validate import find_missing_commands
+    from hpk.manifest import Plugin
+
+    plugins = {
+        "x": Plugin(
+            description="d",
+            upstream_command="hermes nope rename",
+            verified_in_upstream=True,
+        )
+    }
+    missing = find_missing_commands(plugins, [])
+    assert missing == ["x"]

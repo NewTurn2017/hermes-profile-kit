@@ -1,15 +1,11 @@
-"""Per-provider token collection handlers.
-
-Each handler is a small class with two methods:
-  - intro(): print docs/links so the user knows where to obtain the token
-  - validate(value): return (ok: bool, reason: str) without echoing the value
-"""
+"""Per-provider token collection handlers."""
 
 from hpk.tokens.anthropic import HANDLER as _anthropic
 from hpk.tokens.base import TokenHandler
 from hpk.tokens.brave import BraveHandler
 from hpk.tokens.discord import WIZARDS as _discord_wizards
 from hpk.tokens.exa import ExaHandler
+from hpk.tokens.openai_codex import WIZARDS as _openai_codex_wizards
 from hpk.tokens.slack import WIZARDS as _slack_wizards
 from hpk.tokens.telegram import WIZARDS as _telegram_wizards
 
@@ -18,7 +14,12 @@ _BY_PROVIDER: dict[str, TokenHandler] = {
     "brave": BraveHandler(),
     "exa": ExaHandler(),
 }
-_BY_WIZARD: dict[str, TokenHandler] = {**_telegram_wizards, **_slack_wizards, **_discord_wizards}
+_BY_WIZARD: dict[str, TokenHandler] = {
+    **_telegram_wizards,
+    **_slack_wizards,
+    **_discord_wizards,
+    **_openai_codex_wizards,
+}
 
 
 def get_handler(*, provider: str | None = None, wizard: str | None = None) -> TokenHandler:

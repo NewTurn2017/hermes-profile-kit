@@ -1,7 +1,7 @@
-schema_version: 2
+schema_version: 3
 kit:
   name: hermes-profile-kit
-  version: 2.0.0
+  version: 3.0.0
   license: MIT
 
 upstream:                            # CI-managed; humans don't edit
@@ -65,6 +65,23 @@ profiles:
         - { key: DISCORD_BOT_TOKEN,  provider: discord,  wizard: discord_devportal }
     recommended_plugins: []
 
+  - name: seb
+    template: profiles/seb
+    role: Second-brain controller (Obsidian + NotebookLM via Slack)
+    model_tier: openai-codex
+    channels: [slack]
+    tokens:
+      required:
+        - { key: SLACK_BOT_TOKEN,       provider: slack,        wizard: slack_bot     }
+        - { key: SLACK_SIGNING_SECRET,  provider: slack,        wizard: slack_signing }
+        - { key: SLACK_APP_TOKEN,       provider: slack,        wizard: slack_app     }
+        - { key: OPENAI_BASE_URL,       provider: openai-codex, wizard: codex_base_url, default: "http://localhost:8765/v1" }
+        - { key: OPENAI_API_KEY,        provider: openai-codex, wizard: codex_api_key,  default: "sk-codex-proxy-local" }
+      optional:
+        - { key: JINA_API_KEY, provider: jina }
+    recommended_plugins:
+      - { id: codex-openai-proxy, default: true }
+
 plugins:
   honcho-memory:
     description: "External long-term memory via Honcho (Plastic Labs). Default Hermes external memory provider."
@@ -76,6 +93,13 @@ plugins:
     upstream_command: "hermes -p {profile} tools enable web_search"
     verified_in_upstream: true
     docs: https://brave.com/search/api/
+  codex-openai-proxy:
+    description: "Local OpenAI-compatible HTTP proxy routing /v1/chat/completions to the user's logged-in Codex CLI (gpt-5.5 / gpt-5.4-mini). No separate OpenAI billing key required."
+    upstream_command: null
+    install_path: scripts/codex-openai-proxy
+    launchd_template: scripts/codex-openai-proxy/launchd.plist.example
+    verified_in_upstream: false
+    docs: scripts/codex-openai-proxy/README.md
 
 preserve_existing:  [".env"]
 overwrite_from_template: ["SOUL.md", "config.yaml"]

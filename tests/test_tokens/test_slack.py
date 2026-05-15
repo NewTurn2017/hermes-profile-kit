@@ -1,4 +1,4 @@
-from hpk.tokens.slack import SlackBotHandler, SlackAppHandler
+from hpk.tokens.slack import SlackAppHandler, SlackBotHandler
 
 
 def test_bot_token_prefix():

@@ -4,6 +4,7 @@ Each handler is a small class with two methods:
   - intro(): print docs/links so the user knows where to obtain the token
   - validate(value): return (ok: bool, reason: str) without echoing the value
 """
+
 from hpk.tokens.anthropic import HANDLER as _anthropic
 from hpk.tokens.base import TokenHandler
 from hpk.tokens.brave import BraveHandler

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.hermes.codex-openai-proxy</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <!-- Replace /path/to with the absolute path to your venv Python. -->
+    <!-- Run: cd scripts/codex-openai-proxy && uv venv && which python -->
+    <string>/path/to/scripts/codex-openai-proxy/.venv/bin/python</string>
+    <string>-m</string>
+    <string>uvicorn</string>
+    <string>proxy:app</string>
+    <string>--host</string>
+    <string>127.0.0.1</string>
+    <string>--port</string>
+    <string>8765</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/path/to/scripts/codex-openai-proxy</string>
+
+  <key>StandardOutPath</key>
+  <string>/Users/genie/.hermes/profiles/seb/logs/codex-proxy.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/genie/.hermes/profiles/seb/logs/codex-proxy.err.log</string>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CODEX_PROXY_PORT</key>
+    <string>8765</string>
+    <key>CODEX_PROXY_MODELS</key>
+    <string>gpt-5.5,gpt-5.4-mini</string>
+  </dict>
+</dict>
+</plist>

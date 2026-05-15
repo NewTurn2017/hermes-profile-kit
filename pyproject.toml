@@ -12,6 +12,7 @@ license = { text = "MIT" }
 authors = [{ name = "NewTurn2017" }]
 dependencies = [
   "click>=8.1",
+  "packaging>=23",
   "questionary>=2.0",
   "rich>=13",
   "pyyaml>=6",

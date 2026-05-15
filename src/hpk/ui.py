@@ -15,6 +15,7 @@ THEME = Theme(
 )
 
 console = Console(theme=THEME)
+console_err = Console(theme=THEME, stderr=True)
 
 
 def step(msg: str) -> None:
@@ -30,7 +31,7 @@ def warn(msg: str) -> None:
 
 
 def err(msg: str) -> None:
-    console.print(f"  [err]✗[/] {msg}")
+    console_err.print(f"  [err]✗[/] {msg}")
 
 
 def header(title: str) -> None:

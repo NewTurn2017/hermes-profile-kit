@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,5 +46,14 @@ class FakeHermes:
 def fake_hermes(monkeypatch, tmp_path) -> FakeHermes:
     fh = FakeHermes(home=tmp_path)
     monkeypatch.setattr(subprocess, "run", fh)
+    # Pretend `hermes` is on PATH even when tests rewrite PATH for other reasons.
+    real_which = shutil.which
+
+    def fake_which(name: str, *a: Any, **kw: Any) -> str | None:
+        if name == "hermes":
+            return "/usr/local/bin/hermes"
+        return real_which(name, *a, **kw)
+
+    monkeypatch.setattr(shutil, "which", fake_which)
     monkeypatch.setenv("HOME", str(tmp_path))
     return fh

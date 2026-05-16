@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import subprocess
 
@@ -27,64 +28,63 @@ app = FastAPI(title="codex-openai-proxy", version="0.1.0")
 
 # ── Translation helpers ────────────────────────────────────────────────────────
 
-def _to_responses_payload(body: dict) -> dict:
-    """Convert Chat Completions request body to Responses API payload for codex CLI."""
-    messages: list[dict] = body.get("messages", [])
-    instructions: str | None = None
-    turns: list[dict] = []
+logger = logging.getLogger("codex_openai_proxy")
 
+
+def _flatten_content(content) -> str:
+    """Collapse possibly-multipart content into a single string of text parts."""
+    if isinstance(content, list):
+        return " ".join(part.get("text", "") for part in content if part.get("type") == "text")
+    return content or ""
+
+
+def _render_prompt(messages: list[dict]) -> str:
+    parts: list[str] = []
     for msg in messages:
-        role = msg["role"]
-        content = msg.get("content") or ""
-        if isinstance(content, list):
-            # Multi-part content — extract text parts only.
-            content = " ".join(
-                part.get("text", "") for part in content if part.get("type") == "text"
-            )
-        if role == "system":
-            instructions = content
-        elif role == "user":
-            turns.append({
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text": content}],
-            })
-        elif role == "assistant":
-            turns.append({
-                "type": "message",
-                "role": "assistant",
-                "content": [{"type": "output_text", "text": content}],
-            })
-
-    # Single user message: use simpler string form accepted by Responses API.
-    if len(turns) == 1 and turns[0]["role"] == "user":
-        user_text = turns[0]["content"][0]["text"]
-        payload: dict = {"model": body.get("model", MODELS[0]), "input": user_text}
-    else:
-        payload = {"model": body.get("model", MODELS[0]), "input": turns}
-
-    if instructions:
-        payload["instructions"] = instructions
-    if tools := body.get("tools"):
-        payload["tools"] = tools
-
-    return payload
+        role = msg.get("role", "user")
+        text = _flatten_content(msg.get("content", ""))
+        if role in {"system", "user", "assistant"}:
+            parts.append(f"[{role}]\n{text}")
+    return "\n\n".join(parts)
 
 
-def _extract_content(response_bytes: bytes) -> str:
-    """Extract assistant text from Responses API JSON output."""
-    try:
-        data = json.loads(response_bytes)
-    except json.JSONDecodeError:
-        return response_bytes.decode(errors="replace")
+def _to_codex_exec_invocation(body: dict) -> tuple[list[str], str]:
+    """Convert a Chat Completions request to (argv_tail, stdin_str) for `codex exec`.
 
-    for item in data.get("output", []):
-        if item.get("type") == "message":
-            for part in item.get("content", []):
-                if part.get("type") == "output_text":
-                    return str(part["text"])
-    # Fallback: return raw output (e.g. if codex returns plain text).
-    return response_bytes.decode(errors="replace").strip()
+    Returns the argv *after* `codex exec` and the stdin payload. Drops
+    response_format and tools silently (codex CLI has no equivalent) — mem0's
+    own system prompts already instruct JSON output, so the drop is benign.
+    """
+    if body.get("response_format") or body.get("tools"):
+        logger.debug("proxy: dropping unsupported fields (response_format / tools)")
+    model = body.get("model", MODELS[0])
+    args = ["--skip-git-repo-check", "--ephemeral", "--json", "-m", model, "-"]
+    stdin = _render_prompt(body.get("messages", []))
+    return args, stdin
+
+
+def _parse_codex_jsonl_events(stdout: bytes) -> tuple[str, str | None]:
+    """Parse `codex exec --json` output. Returns (assistant_text, error_or_None)."""
+    text_parts: list[str] = []
+    error: str | None = None
+    for line in stdout.splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue  # ignore malformed lines (e.g., leading banner text)
+        etype = event.get("type")
+        if etype == "item.completed":
+            item = event.get("item") or {}
+            if item.get("type") == "agent_message":
+                text_parts.append(item.get("text", ""))
+        elif etype == "error":
+            error = event.get("message") or json.dumps(event)
+        elif etype == "turn.failed":
+            err = event.get("error") or {}
+            error = err.get("message") or json.dumps(event)
+    return "".join(text_parts), error
 
 
 def _is_auth_error(stderr: bytes) -> bool:

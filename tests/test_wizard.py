@@ -1,7 +1,7 @@
 import pytest
 
 from hpk.manifest import Manifest
-from hpk.wizard import PreflightError, preflight
+from hpk.wizard import HermesNotInstalledError, HermesVersionTooOldError, preflight
 
 
 def _load_manifest() -> Manifest:
@@ -24,7 +24,16 @@ def test_preflight_passes(fake_hermes, monkeypatch):
 def test_preflight_rejects_old_hermes(monkeypatch, fake_hermes):
     fake_hermes.version = "0.10.0"
     monkeypatch.setattr("hpk.wizard._has_local_bin_on_path", lambda: True)
-    with pytest.raises(PreflightError, match="min_hermes_version"):
+    with pytest.raises(HermesVersionTooOldError):
+        preflight(_load_manifest())
+
+
+def test_preflight_raises_when_hermes_missing(monkeypatch):
+    import shutil
+
+    monkeypatch.setattr(shutil, "which", lambda _: None)
+    monkeypatch.setattr("hpk.wizard._has_local_bin_on_path", lambda: True)
+    with pytest.raises(HermesNotInstalledError, match="not installed"):
         preflight(_load_manifest())
 
 

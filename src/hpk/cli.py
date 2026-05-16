@@ -59,12 +59,14 @@ def setup(
             skip_tokens=skip_tokens,
             skip_plugins=skip_plugins,
         )
+    except wizard.HermesNotInstalledError as e:
+        ui.err(str(e))
+        sys.exit(10)
+    except wizard.HermesVersionTooOldError as e:
+        ui.err(str(e))
+        sys.exit(11)
     except wizard.PreflightError as e:
         ui.err(str(e))
-        if "not installed" in str(e):
-            sys.exit(10)
-        if "min_hermes_version" in str(e):
-            sys.exit(11)
         sys.exit(30)
 
 

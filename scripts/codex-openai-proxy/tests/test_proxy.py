@@ -29,19 +29,25 @@ def test_list_models_returns_configured_models(client):
 # ── /v1/chat/completions (non-streaming) ──────────────────────────────────────
 
 def _fake_popen(agent_text: str = "Hello world", returncode: int = 0, stderr: bytes = b""):
-    """Mock Popen returning codex-exec-style JSONL stdout."""
+    """Mock Popen returning codex-exec-style JSONL stdout, suitable for both
+    proc.communicate() AND the streaming readline-based reader."""
     mock = MagicMock()
-    jsonl = b"\n".join([
-        b'{"type":"thread.started","thread_id":"x"}',
-        b'{"type":"turn.started"}',
+    jsonl_lines = [
+        b'{"type":"thread.started","thread_id":"x"}\n',
+        b'{"type":"turn.started"}\n',
         json.dumps({
             "type": "item.completed",
             "item": {"id": "i0", "type": "agent_message", "text": agent_text},
-        }).encode(),
-        b'{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":2}}',
-    ])
-    mock.communicate.return_value = (jsonl, stderr)
+        }).encode() + b"\n",
+        b'{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":2}}\n',
+    ]
+    # iter(readline, b'') iterates until b'' is returned, so terminate with b''
+    mock.stdout.readline.side_effect = jsonl_lines + [b""]
+    mock.stderr.read.return_value = stderr
+    mock.stdin = MagicMock()
     mock.returncode = returncode
+    mock.poll.return_value = returncode  # already finished
+    mock.communicate.return_value = (b"".join(jsonl_lines), stderr)  # legacy support
     return mock
 
 
@@ -75,12 +81,11 @@ def test_system_message_renders_into_stdin_prompt(client):
 
     def capturing_popen(cmd, **kwargs):
         mock = _fake_popen("ok")
-        original = mock.communicate
-        def capturing_communicate(input_data=None):
-            if input_data is not None:
-                captured["stdin"] = input_data.decode()
-            return original(input_data)
-        mock.communicate = capturing_communicate
+        original_write = mock.stdin.write
+        def capturing_write(data):
+            captured["stdin"] = data.decode()
+            return original_write(data)
+        mock.stdin.write = capturing_write
         return mock
 
     with patch("subprocess.Popen", side_effect=capturing_popen):
@@ -94,10 +99,19 @@ def test_system_message_renders_into_stdin_prompt(client):
     assert captured["stdin"] == "[system]\nYou are helpful\n\n[user]\nHi"
 
 
-def test_codex_auth_error_returns_502_with_hint(client):
+def _fake_popen_error(stderr: bytes, returncode: int = 1):
+    """Mock Popen that returns no useful stdout and a non-zero returncode."""
     mock = MagicMock()
-    mock.communicate.return_value = (b"", b"error: not authenticated, run codex auth login")
-    mock.returncode = 1
+    mock.stdout.readline.side_effect = [b""]  # EOF immediately — no events
+    mock.stderr.read.return_value = stderr
+    mock.stdin = MagicMock()
+    mock.returncode = returncode
+    mock.poll.return_value = returncode
+    return mock
+
+
+def test_codex_auth_error_returns_502_with_hint(client):
+    mock = _fake_popen_error(b"error: not authenticated, run codex auth login")
     with patch("subprocess.Popen", return_value=mock):
         r = client.post("/v1/chat/completions", json={
             "model": "gpt-5.5",
@@ -109,9 +123,7 @@ def test_codex_auth_error_returns_502_with_hint(client):
 
 def test_codex_non_auth_error_returns_502_with_stderr(client):
     """Non-zero returncode without auth markers → 502 codex_error with stderr surfaced."""
-    mock = MagicMock()
-    mock.communicate.return_value = (b"", b"error: rate limited")
-    mock.returncode = 1
+    mock = _fake_popen_error(b"error: rate limited")
     with patch("subprocess.Popen", return_value=mock):
         r = client.post("/v1/chat/completions", json={
             "model": "gpt-5.5",
@@ -273,3 +285,58 @@ def test_chat_completions_invokes_codex_exec(client):
     assert captured["cmd"][:2] == ["codex", "exec"]
     assert "--json" in captured["cmd"]
     assert "-m" in captured["cmd"] and "gpt-5.5" in captured["cmd"]
+
+
+# ── Early termination ─────────────────────────────────────────────────────────
+
+def test_run_codex_terminates_after_turn_completed():
+    """After turn.completed is read from stdout, the process is terminated."""
+    from proxy import _run_codex_until_done
+    mock_proc = _fake_popen("hello")
+    # Simulate process still running after turn.completed seen
+    mock_proc.poll.return_value = None  # alive
+    mock_proc.wait.return_value = 0
+
+    with patch("subprocess.Popen", return_value=mock_proc):
+        stdout, stderr, rc = _run_codex_until_done(["--json", "-"], b"prompt")
+
+    # The reader should have stopped after turn.completed, then terminate() called
+    mock_proc.terminate.assert_called_once()
+    # Stdout should contain the 4 JSONL lines we mocked
+    assert b'agent_message' in stdout
+    assert b'turn.completed' in stdout
+
+
+def test_run_codex_hard_timeout_kills_process():
+    """If turn.completed never arrives, hard timeout kills the process."""
+    import threading as _threading
+    from proxy import _run_codex_until_done
+
+    mock_proc = MagicMock()
+    # Use an event to make readline block until kill() unblocks it.
+    unblock = _threading.Event()
+
+    def blocking_readline():
+        # First call: return a non-terminal line (no turn.completed).
+        # Subsequent calls: block until unblocked, then return EOF.
+        if not getattr(blocking_readline, "_first", False):
+            blocking_readline._first = True
+            return b'{"type":"thread.started"}\n'
+        unblock.wait(timeout=5)
+        return b""
+
+    mock_proc.stdout.readline.side_effect = blocking_readline
+    mock_proc.stderr.read.return_value = b""
+    mock_proc.stdin = MagicMock()
+    mock_proc.poll.return_value = None
+    mock_proc.returncode = -9  # SIGKILL
+
+    # When kill() is called, unblock the blocking readline so the reader exits.
+    mock_proc.kill.side_effect = lambda: unblock.set()
+
+    with patch("subprocess.Popen", return_value=mock_proc):
+        stdout, stderr, rc = _run_codex_until_done(["--json", "-"], b"prompt", timeout=0.2)
+
+    # Hard timeout should have called kill()
+    mock_proc.kill.assert_called_once()
+    assert rc == -9

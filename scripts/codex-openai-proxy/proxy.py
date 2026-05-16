@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import subprocess
+import threading
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -97,6 +98,83 @@ def _is_auth_error(stderr: bytes) -> bool:
     return "auth" in text or "login" in text or "not authenticated" in text
 
 
+def _run_codex_until_done(
+    args: list[str], stdin_bytes: bytes, timeout: float = 90.0
+) -> tuple[bytes, bytes, int]:
+    """Spawn `codex exec` with args + stdin; terminate as soon as the turn ends.
+
+    codex exec's agent loop can hang for tens of seconds after emitting
+    `turn.completed` (cleanup / telemetry). We only need the events up to and
+    including `turn.completed` / `turn.failed`, so once we see one of those
+    events on stdout we terminate the process.
+
+    Returns (stdout, stderr, returncode). returncode is the process exit code,
+    or -signal if we terminated. Callers should evaluate stdout content rather
+    than returncode alone.
+    """
+    proc = subprocess.Popen(
+        ["codex", "exec", *args],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=1,
+    )
+    assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
+    proc.stdin.write(stdin_bytes)
+    proc.stdin.close()
+
+    stdout_lines: list[bytes] = []
+    stderr_chunks: list[bytes] = []
+    turn_done = threading.Event()
+
+    def stdout_reader() -> None:
+        try:
+            for raw_line in iter(proc.stdout.readline, b""):
+                stdout_lines.append(raw_line)
+                text = raw_line.decode(errors="replace").strip()
+                if not text:
+                    continue
+                try:
+                    ev = json.loads(text)
+                except json.JSONDecodeError:
+                    continue
+                if ev.get("type") in ("turn.completed", "turn.failed"):
+                    turn_done.set()
+                    return
+        finally:
+            turn_done.set()  # stdout closed (proc exiting) also unblocks waiter
+
+    def stderr_reader() -> None:
+        try:
+            stderr_chunks.append(proc.stderr.read())
+        except Exception:
+            pass
+
+    out_t = threading.Thread(target=stdout_reader, daemon=True)
+    err_t = threading.Thread(target=stderr_reader, daemon=True)
+    out_t.start()
+    err_t.start()
+
+    finished_naturally = turn_done.wait(timeout=timeout)
+    if not finished_naturally:
+        # Hard timeout — codex hasn't emitted turn.completed within budget
+        proc.kill()
+    elif proc.poll() is None:
+        # Got turn.completed but proc still alive — terminate so we return now
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+    out_t.join(timeout=1)
+    err_t.join(timeout=1)
+
+    stdout = b"".join(stdout_lines)
+    stderr = b"".join(stderr_chunks)
+    return stdout, stderr, proc.returncode if proc.returncode is not None else -1
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/v1/models")
@@ -115,13 +193,14 @@ async def chat_completions(request: Request):
     args, stdin = _to_codex_exec_invocation(body)
     stdin_bytes = stdin.encode()
 
-    try:
-        proc = subprocess.Popen(
-            ["codex", "exec", *args],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+    if stream:
+        return StreamingResponse(
+            _stream(args, stdin_bytes, model),
+            media_type="text/event-stream",
         )
+
+    try:
+        stdout, stderr, returncode = _run_codex_until_done(args, stdin_bytes)
     except FileNotFoundError:
         raise HTTPException(
             502,
@@ -133,20 +212,17 @@ async def chat_completions(request: Request):
             },
         ) from None
 
-    if stream:
-        return StreamingResponse(
-            _stream(proc, stdin_bytes, model),
-            media_type="text/event-stream",
-        )
+    # Try to parse what we got, regardless of returncode — early termination via
+    # proc.terminate() yields a negative returncode but the stdout we collected
+    # is the authoritative source of truth.
+    content, parser_error = _parse_codex_jsonl_events(stdout)
 
-    stdout, stderr = proc.communicate(stdin_bytes)
-    if proc.returncode != 0:
+    if not content and returncode != 0:
+        # Process failed AND we got nothing useful — surface the error.
         if _is_auth_error(stderr):
             raise HTTPException(
                 502,
-                detail={
-                    "error": {"message": "Run `codex login` first", "type": "codex_auth_required"}
-                },
+                detail={"error": {"message": "Run `codex login` first", "type": "codex_auth_required"}},
             )
         raise HTTPException(
             502,
@@ -159,11 +235,14 @@ async def chat_completions(request: Request):
             },
         )
 
-    content, error = _parse_codex_jsonl_events(stdout)
-    if error:
+    if parser_error and not content:
         raise HTTPException(
-            502, detail={"error": {"message": error, "type": "codex_error"}}
+            502, detail={"error": {"message": parser_error, "type": "codex_error"}}
         )
+
+    # We have content (and maybe also a non-fatal parser_error — content wins).
+    # Note: also handles the early-termination case where returncode is negative
+    # because we sent SIGTERM after seeing turn.completed.
 
     return {
         "id": "chatcmpl-codex",
@@ -180,12 +259,22 @@ async def chat_completions(request: Request):
     }
 
 
-async def _stream(proc: subprocess.Popen, stdin_data: bytes, model: str):
-    """Wait for codex exec to finish, then emit OpenAI SSE chunks."""
+async def _stream(args: list[str], stdin_data: bytes, model: str):
+    """Wait for codex exec to finish (terminating early after turn.completed), then emit OpenAI SSE chunks."""
     loop = asyncio.get_running_loop()
-    stdout, stderr = await loop.run_in_executor(None, proc.communicate, stdin_data)
+    try:
+        stdout, stderr, returncode = await loop.run_in_executor(
+            None, _run_codex_until_done, args, stdin_data
+        )
+    except FileNotFoundError:
+        err = {"error": {"message": "codex CLI not found. Install: npm i -g @openai/codex", "type": "codex_not_found"}}
+        yield f"data: {json.dumps(err)}\n\n"
+        yield "data: [DONE]\n\n"
+        return
 
-    if proc.returncode != 0:
+    content, parser_error = _parse_codex_jsonl_events(stdout)
+
+    if not content and returncode != 0:
         error_text = (
             "Run `codex login` first" if _is_auth_error(stderr)
             else stderr.decode(errors="replace").strip() or "codex exec exited non-zero"
@@ -194,9 +283,8 @@ async def _stream(proc: subprocess.Popen, stdin_data: bytes, model: str):
         yield "data: [DONE]\n\n"
         return
 
-    content, error = _parse_codex_jsonl_events(stdout)
-    if error:
-        yield f"data: {json.dumps({'error': {'message': error, 'type': 'codex_error'}})}\n\n"
+    if parser_error and not content:
+        yield f"data: {json.dumps({'error': {'message': parser_error, 'type': 'codex_error'}})}\n\n"
         yield "data: [DONE]\n\n"
         return
 

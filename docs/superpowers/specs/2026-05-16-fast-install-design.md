@@ -100,14 +100,11 @@ When the destination `.env` already exists and `--token` or `--env-file` provide
 | 30 | other preflight error / verify found FILL_IN | unchanged |
 | 40 | manifest invalid or unknown id | unchanged (extended to cover unknown `--token` / `--accept-plugin` ids) |
 
-### 3.8 Token-handler refactor
+### 3.8 Token-handler reuse (no refactor needed)
 
-Each `src/hpk/tokens/<provider>.py` currently mixes prompting and validation. Split the `Handler` protocol so:
+`TokenHandler` already exposes `validate(value: str) -> ValidationResult` separately from any prompt loop (the loop lives in `wizard._collect_one`). The flag path simply calls the same `handler.validate(value)` and treats `ValidationResult.ok == False` as exit 20. No handler-side change required.
 
-- `validate(value: str) -> None` raises a typed validation error on failure.
-- `prompt(spec) -> str` continues to drive interactive input, but internally calls `validate()` so flag-path and prompt-path share one validator.
-
-This is the only structural refactor in this release. Existing handler tests stay green; new tests exercise `validate()` directly.
+The wizard does need a helper that, given a `Profile` and a token `KEY`, returns the matching `TokenSpec` (so the flag path can look up which handler to invoke). This helper lives in `wizard.py` alongside the existing collection code.
 
 ### 3.9 `.env` merge module
 
@@ -145,10 +142,10 @@ The `superpowers:using-superpowers` skill's own instruction priority list places
 
 | Test | What it proves |
 |---|---|
-| `tests/tokens/test_validate_extracted.py` (new) | Every existing provider's `validate()` accepts the known-good fixtures and rejects the known-bad fixtures, independent of any prompt loop. |
-| `tests/wizard/test_env_merge.py` (new) | `env_file` merges keys without disturbing siblings; `.env.bak` written; backup overwritten on re-run; merging into an absent `.env` creates it with mode 0600. |
-| `tests/cli/test_non_interactive_flags.py` (new) | Each new flag is recognized; precedence `manifest default < .env < --env-file < --token` holds; missing required → exit 20; unknown KEY → exit 40; unknown plugin ID → exit 40; `--accept-plugin` + `--reject-plugin` on same ID → reject wins with warning. |
-| `tests/e2e/test_non_interactive_setup.py` (new) | A full `hpk setup seb --token ... --accept-plugin codex-openai-proxy --non-interactive` run, with the `hermes` binary mocked, reaches the verify summary with no interactive read; `~/.hermes/profiles/seb/.env` has all required keys filled. |
+| `tests/test_env_file.py` (new) | `env_file` parses comments and blanks; merges keys without disturbing siblings; `.env.bak` written; backup overwritten on re-run; merging into an absent `.env` creates it with mode 0600. |
+| `tests/test_wizard_non_interactive.py` (new) | Value precedence `manifest default < .env < --env-file < --token` holds in `phase_b_tokens`; missing required raises the exit-20 condition; unknown KEY raises exit-40 condition; `--accept-plugin` + `--reject-plugin` on same ID → reject wins with warning. |
+| `tests/test_cli.py` (extend) | Each new flag is recognized by Click; exit codes propagate (20, 40) from wizard errors. |
+| `tests/e2e/test_non_interactive_setup.py` (new) | A full `hpk setup seb --token ... --accept-plugin codex-openai-proxy --non-interactive` run, with `hermes` mocked, completes with no `questionary` read; `~/.hermes/profiles/seb/.env` has all required keys filled. |
 
 Existing `tests/e2e/test_seb_setup.py` and all unit tests must remain green.
 
@@ -160,12 +157,12 @@ Existing `tests/e2e/test_seb_setup.py` and all unit tests must remain green.
 |---|---|
 | `src/hpk/cli.py` | Five new flags on `setup` |
 | `src/hpk/wizard.py` | Precedence logic, plugin decision logic, exit-20 branch |
-| `src/hpk/tokens/__init__.py` | `Handler` protocol gains `validate()` |
-| `src/hpk/tokens/<provider>.py` (each) | Extract `validate()`; `prompt()` calls it |
+| `src/hpk/tokens/__init__.py` | (unchanged — `validate()` already on the protocol) |
+| `src/hpk/tokens/<provider>.py` (each) | (unchanged) |
 | `src/hpk/env_file.py` | New module — parse `--env-file`, merge into `.env`, write `.env.bak` |
-| `tests/tokens/test_validate_extracted.py` | New |
-| `tests/wizard/test_env_merge.py` | New |
-| `tests/cli/test_non_interactive_flags.py` | New |
+| `tests/test_env_file.py` | New |
+| `tests/test_wizard_non_interactive.py` | New |
+| `tests/test_cli.py` | Extend with flag-recognition + exit-code propagation |
 | `tests/e2e/test_non_interactive_setup.py` | New |
 | `README.md` | `⚡ 2-minute install` hero above TL;DR table |
 | `README.ko.md` | Same hero, Korean |
@@ -176,14 +173,13 @@ Existing `tests/e2e/test_seb_setup.py` and all unit tests must remain green.
 
 Not touched: `manifest.yaml` (schema stays 3, no profile changes), `docs/commands.md` (auto-generated, no hermes command changes), upstream-sync workflow.
 
-### 6.2 Commit plan (6 commits, one PR)
+### 6.2 Commit plan (5 commits, one PR)
 
-1. `refactor(tokens): extract validate() from prompt() in each provider handler` — pure refactor, all existing tests stay green.
-2. `feat(env): key-level env_file helper with .env.bak safety net` — new module + unit tests.
-3. `feat(cli): non-interactive setup via --token / --env-file / --accept-plugin / --reject-plugin / --non-interactive` — wizard precedence + exit 20.
+1. `feat(env): key-level env_file helper with .env.bak safety net` — new module + unit tests.
+2. `feat(wizard): value/plugin precedence + NonInteractiveMissingError for --token / --env-file / --accept-plugin / --reject-plugin / --non-interactive` — wizard logic (no CLI surface yet).
+3. `feat(cli): wire non-interactive flags on hpk setup; map errors to exit 20/40` — Click integration + cli test extension.
 4. `test(e2e): non-interactive seb setup completes without interactive prompts` — regression guard for the 2-minute claim.
-5. `docs(readme,agents): 2-minute install hero + standing user instructions to suppress design skills` — the marketing surface.
-6. `chore(release): bump to 3.1.0 + CHANGELOG entry` — release commit.
+5. `docs(readme,agents,changelog): 2-minute install hero + standing user instructions + 3.1.0 release` — marketing surface + version bump in one commit.
 
 ### 6.3 Verification gate before merge
 

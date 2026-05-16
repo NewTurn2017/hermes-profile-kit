@@ -47,12 +47,23 @@ class FakeMemory:
 
 @pytest.fixture
 def fake_memory_factory():
-    """Returns a callable that builds a FakeMemory from a config dict."""
+    """Returns a callable that builds a FakeMemory from a config dict.
+
+    The same FakeMemory instance is returned for the same collection_name so
+    that data added in one CLI invocation is visible to subsequent query/list
+    invocations within the same test.
+    """
     instances: list[FakeMemory] = []
+    _cache: dict[str, FakeMemory] = {}
 
     def factory(config: dict[str, Any]) -> FakeMemory:
+        key = (config.get("vector_store") or {}).get("config", {}).get("collection_name", "")
+        if key and key in _cache:
+            return _cache[key]
         m = FakeMemory(config)
         instances.append(m)
+        if key:
+            _cache[key] = m
         return m
 
     factory.instances = instances  # type: ignore[attr-defined]

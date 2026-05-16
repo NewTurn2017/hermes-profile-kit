@@ -109,5 +109,72 @@ def share_add_cmd(text: str | None, meta: tuple[str, ...]) -> None:
     emit(ok(**payload))
 
 
+_VALID_SCOPES = ("profile", "shared", "all")
+
+
+def _merge_dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Sort by score desc, then dedupe by normalized text (first occurrence wins)."""
+    items_sorted = sorted(items, key=lambda x: x.get("score", 0.0), reverse=True)
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for it in items_sorted:
+        key = (it.get("text") or "").strip().lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(it)
+    return out
+
+
+@main.command("query")
+@click.option("--profile", required=False, help="Source profile (required)")
+@click.option("--q", required=False, help="Search query (required)")
+@click.option("--scope", default="all", help="profile|shared|all (default: all)")
+@click.option("--limit", default=5, type=int, help="Max results (default: 5)")
+def query_cmd(profile: str | None, q: str | None, scope: str, limit: int) -> None:
+    if scope not in _VALID_SCOPES:
+        emit(err(1, "bad_scope", f"--scope must be one of {_VALID_SCOPES}"))
+        raise SystemExit(1)
+    if not profile:
+        emit(err(1, "missing_arg", "--profile is required for query"))
+        raise SystemExit(1)
+    if not q or not q.strip():
+        emit(err(1, "missing_arg", "--q is required for query (non-blank)"))
+        raise SystemExit(1)
+    results: list[dict[str, Any]] = []
+    if scope in ("profile", "all"):
+        results.extend(_store_for_profile(profile).search(q, limit=limit))
+    if scope in ("shared", "all"):
+        results.extend(_shared_store().search(q, limit=limit))
+    merged = _merge_dedupe(results)[:limit]
+    emit(ok(memories=merged))
+
+
+@main.command("list")
+@click.option("--profile", required=False, help="Source profile (required)")
+@click.option("--scope", default="all", help="profile|shared|all (default: all)")
+@click.option("--limit", default=20, type=int, help="Max results (default: 20)")
+def list_cmd(profile: str | None, scope: str, limit: int) -> None:
+    if scope not in _VALID_SCOPES:
+        emit(err(1, "bad_scope", f"--scope must be one of {_VALID_SCOPES}"))
+        raise SystemExit(1)
+    if not profile:
+        emit(err(1, "missing_arg", "--profile is required for list"))
+        raise SystemExit(1)
+    results: list[dict[str, Any]] = []
+    if scope in ("profile", "all"):
+        results.extend(_store_for_profile(profile).list(limit=limit))
+    if scope in ("shared", "all"):
+        results.extend(_shared_store().list(limit=limit))
+    emit(ok(memories=results[:limit]))
+
+
+@main.command("share-list")
+@click.option("--limit", default=20, type=int, help="Max results (default: 20)")
+def share_list_cmd(limit: int) -> None:
+    results = _shared_store().list(limit=limit)
+    emit(ok(memories=results))
+
+
 if __name__ == "__main__":
     main()

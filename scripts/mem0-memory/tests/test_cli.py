@@ -91,3 +91,88 @@ def test_share_add_rejects_whitespace_only_text(runner):
     assert result.exit_code == 1
     payload = json.loads(result.output)
     assert payload["kind"] == "missing_arg"
+
+
+# ----- read-path tests -----
+
+def test_query_scope_profile_only(runner):
+    runner.invoke(cli_mod.main, ["share-add", "--text", "shared fact"])
+    runner.invoke(cli_mod.main, ["add", "--profile", "seb", "--text", "seb fact"])
+    result, payload = _invoke(
+        runner, ["query", "--profile", "seb", "--q", "fact", "--scope", "profile"]
+    )
+    assert result.exit_code == 0
+    texts = [m["text"] for m in payload["memories"]]
+    assert "seb fact" in texts
+    assert "shared fact" not in texts
+
+
+def test_query_scope_shared_only(runner):
+    runner.invoke(cli_mod.main, ["share-add", "--text", "shared fact"])
+    runner.invoke(cli_mod.main, ["add", "--profile", "seb", "--text", "seb fact"])
+    result, payload = _invoke(
+        runner, ["query", "--profile", "seb", "--q", "fact", "--scope", "shared"]
+    )
+    assert result.exit_code == 0
+    texts = [m["text"] for m in payload["memories"]]
+    assert "shared fact" in texts
+    assert "seb fact" not in texts
+
+
+def test_query_scope_all_merges_profile_and_shared(runner):
+    runner.invoke(cli_mod.main, ["share-add", "--text", "shared fact"])
+    runner.invoke(cli_mod.main, ["add", "--profile", "seb", "--text", "seb fact"])
+    runner.invoke(cli_mod.main, ["add", "--profile", "assistant", "--text", "assistant fact"])
+    result, payload = _invoke(
+        runner, ["query", "--profile", "seb", "--q", "fact", "--scope", "all"]
+    )
+    assert result.exit_code == 0
+    texts = [m["text"] for m in payload["memories"]]
+    assert "seb fact" in texts
+    assert "shared fact" in texts
+    assert "assistant fact" not in texts
+    scopes = {m["scope"] for m in payload["memories"]}
+    assert scopes == {"profile", "shared"}
+
+
+def test_query_scope_default_is_all(runner):
+    runner.invoke(cli_mod.main, ["share-add", "--text", "shared fact"])
+    runner.invoke(cli_mod.main, ["add", "--profile", "seb", "--text", "seb fact"])
+    result, payload = _invoke(runner, ["query", "--profile", "seb", "--q", "fact"])
+    texts = {m["text"] for m in payload["memories"]}
+    assert texts == {"seb fact", "shared fact"}
+
+
+def test_query_rejects_unknown_scope(runner):
+    result = runner.invoke(
+        cli_mod.main, ["query", "--profile", "seb", "--q", "x", "--scope", "bogus"]
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["kind"] == "bad_scope"
+
+
+def test_query_respects_limit(runner):
+    for i in range(5):
+        runner.invoke(cli_mod.main, ["add", "--profile", "seb", "--text", f"fact {i}"])
+    result, payload = _invoke(
+        runner, ["query", "--profile", "seb", "--q", "fact", "--scope", "profile", "--limit", "2"]
+    )
+    assert len(payload["memories"]) == 2
+
+
+def test_list_profile(runner):
+    runner.invoke(cli_mod.main, ["add", "--profile", "seb", "--text", "x1"])
+    runner.invoke(cli_mod.main, ["add", "--profile", "seb", "--text", "x2"])
+    result, payload = _invoke(runner, ["list", "--profile", "seb", "--scope", "profile"])
+    assert result.exit_code == 0
+    assert len(payload["memories"]) == 2
+
+
+def test_share_list(runner):
+    runner.invoke(cli_mod.main, ["share-add", "--text", "g1"])
+    runner.invoke(cli_mod.main, ["share-add", "--text", "g2"])
+    result, payload = _invoke(runner, ["share-list"])
+    assert result.exit_code == 0
+    texts = [m["text"] for m in payload["memories"]]
+    assert {"g1", "g2"} <= set(texts)

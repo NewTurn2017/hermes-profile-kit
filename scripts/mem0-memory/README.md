@@ -130,3 +130,4 @@ cd scripts/mem0-memory && uv run pytest -v
 - No encryption at rest. Filesystem permissions are the trust boundary.
 - No automatic backup or migration.
 - No hosted-mem0 backend yet (planned: `MEM0_API_KEY` token + config switch).
+- Without a working LLM extractor, the `query` fallback uses SQL LIKE (substring match only). Queries that are semantically related but lexically different from the stored text will return empty — the README "Demo" section's `--q "사용자 일정"` queries assume a functional `OPENAI_API_KEY`.

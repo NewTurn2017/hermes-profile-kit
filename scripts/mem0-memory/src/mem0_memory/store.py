@@ -167,7 +167,7 @@ class Store:
     def list(self, *, limit: int = 20) -> list[dict[str, Any]]:
         raw_result = self.mem.get_all(top_k=limit, filters=self.scope_kwargs)
         items = raw_result.get("results", []) if isinstance(raw_result, dict) else raw_result
-        return [
+        out = [
             {
                 "id": item.get("id"),
                 "text": item.get("memory") or item.get("text") or "",
@@ -179,4 +179,29 @@ class Store:
                 "raw": False,
             }
             for item in items
+        ]
+        out.extend(self._list_raw(limit=limit))
+        return out[:limit]
+
+    def _list_raw(self, *, limit: int) -> list[dict[str, Any]]:
+        con = sqlite3.connect(self.dir / "store.sqlite")
+        try:
+            rows = con.execute(
+                "SELECT id, text, ts FROM raw_facts ORDER BY ts DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        finally:
+            con.close()
+        return [
+            {
+                "id": f"raw_{rid}",
+                "text": text,
+                "score": 0.0,
+                "scope": self.scope_name,
+                "agent_id": self.scope_kwargs.get("agent_id"),
+                "app_id": None,
+                "ts": ts,
+                "raw": True,
+            }
+            for (rid, text, ts) in rows
         ]

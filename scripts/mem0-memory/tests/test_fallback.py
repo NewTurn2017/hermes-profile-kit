@@ -95,6 +95,16 @@ def test_raw_item_reserved_when_mem0_fills_limit(hermes_home, high_volume_factor
     assert sum(1 for r in results if r["raw"]) == 1
 
 
+def test_list_includes_raw_facts(hermes_home, exploding_factory):
+    s = Store(profile="seb", memory_factory=exploding_factory)
+    with pytest.raises(ExtractorError):
+        s.add("raw fact only")
+    out = s.list(limit=5)
+    texts = [r["text"] for r in out]
+    assert "raw fact only" in texts
+    assert any(r["raw"] for r in out)
+
+
 def test_search_item_shape_includes_ts_and_app_id(hermes_home, fake_memory_factory):
     """All returned items must have the documented shape: ts and app_id keys present."""
     s = Store(profile="seb", memory_factory=fake_memory_factory)

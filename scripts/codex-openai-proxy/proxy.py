@@ -1,11 +1,11 @@
-"""Local OpenAI-compatible proxy routing /v1/chat/completions to `codex responses` CLI.
+"""Local OpenAI-compatible proxy routing /v1/chat/completions to `codex exec --json -`.
 
 Translation layer:
-  OpenAI Chat Completions (input) → OpenAI Responses API format → codex CLI stdin
-  codex CLI stdout (Responses API format) → OpenAI Chat Completions (output)
+  OpenAI Chat Completions (input) → rendered [role] prompt → codex exec stdin
+  codex exec stdout (JSONL events) → parsed agent_message text → OpenAI Chat Completions (output)
 
-If the codex CLI interface changes, update _to_responses_payload() and
-_extract_content() only — the HTTP layer and test surface stay unchanged.
+If the codex CLI interface changes, update _to_codex_exec_invocation() and
+_parse_codex_jsonl_events() — the HTTP layer and test surface stay unchanged.
 """
 
 from __future__ import annotations
@@ -64,7 +64,12 @@ def _to_codex_exec_invocation(body: dict) -> tuple[list[str], str]:
 
 
 def _parse_codex_jsonl_events(stdout: bytes) -> tuple[str, str | None]:
-    """Parse `codex exec --json` output. Returns (assistant_text, error_or_None)."""
+    """Parse `codex exec --json` output. Returns (assistant_text, error_or_None).
+
+    Both fields may be populated if the stream contains agent_message events
+    AND an error/turn.failed event; callers should treat a non-None error as
+    authoritative (HTTP 502) even when text is also present.
+    """
     text_parts: list[str] = []
     error: str | None = None
     for line in stdout.splitlines():

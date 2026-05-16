@@ -27,12 +27,11 @@ pipx install --upgrade hermes-profile-kit
 hpk setup seb --non-interactive \
   --token SLACK_BOT_TOKEN=<xoxb-...> \
   --token SLACK_SIGNING_SECRET=<32-hex> \
-  --token SLACK_APP_TOKEN=<xapp-...> \
-  --accept-plugin codex-openai-proxy
+  --token SLACK_APP_TOKEN=<xapp-...>
 hpk verify seb
 ```
 
-3 Slack tokens come from the user's Slack App. Fastest path: tell the
+Only 3 Slack tokens are required. Fastest path to get them: tell the
 user to create the app from `profiles/seb/slack-app-manifest.json` at
 <https://api.slack.com/apps> → Create New App → From an app manifest →
 paste the JSON. That provisions all bot scopes, `app_mention` event,
@@ -40,7 +39,12 @@ Socket Mode, and interactivity in one step; the user then copies
 `SLACK_BOT_TOKEN` (Install App), `SLACK_APP_TOKEN` (Basic Information →
 App-Level Tokens → Generate with `connections:write`), and
 `SLACK_SIGNING_SECRET` (Basic Information → App Credentials).
-`OPENAI_BASE_URL` / `OPENAI_API_KEY` use manifest defaults.
+
+The model uses Hermes's native `openai-codex` provider — no proxy plugin,
+no OpenAI API key. Prerequisite: the user has `codex auth login` done.
+The `codex-openai-proxy` plugin is now opt-in (default `false`); do NOT
+pass `--accept-plugin codex-openai-proxy` unless the user explicitly asks
+for the local HTTP bridge.
 
 ## Fast-paths: other profiles
 
@@ -50,12 +54,13 @@ App-Level Tokens → Generate with `connections:write`), and
 | `assistant` | `ANTHROPIC_API_KEY` | `TELEGRAM_BOT_TOKEN` | `honcho-memory` |
 | `research` | `ANTHROPIC_API_KEY` | `BRAVE_SEARCH_API_KEY`, `EXA_API_KEY` | `honcho-memory`, `brave-search-tool` |
 | `community-bot` | `ANTHROPIC_API_KEY` | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN` | — |
-| `seb` | 3× `SLACK_*` (see fast-path above) | `JINA_API_KEY` | `codex-openai-proxy` |
+| `seb` | 3× `SLACK_*` (see fast-path above) | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `JINA_API_KEY` | — |
 
-> Where the table says `seb: 3× SLACK_* (see fast-path above)`, the
-> `OPENAI_BASE_URL` / `OPENAI_API_KEY` required tokens have manifest
-> defaults that the `--non-interactive` mode applies automatically; the
-> user only needs to provide the three Slack tokens.
+> `seb` no longer requires plugins by default — Hermes's built-in
+> `openai-codex` provider handles gpt-5.5 directly via the local Codex
+> CLI OAuth session. The `codex-openai-proxy` plugin is still in the
+> manifest as opt-in (`default: false`); accept it only if the user
+> explicitly wants a local HTTP bridge instead of the native path.
 
 ## Single command (interactive, human-driven)
 

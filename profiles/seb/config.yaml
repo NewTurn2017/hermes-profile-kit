@@ -1,12 +1,15 @@
 # Hermes profile config — seb (Second Brain)
 # Slack-only personal second-brain controller.
-# Model: gpt-5.5 via local Codex CLI OAuth proxy (OPENAI_BASE_URL override).
+# Model: gpt-5.5 via Hermes's native openai-codex provider (uses local Codex CLI OAuth session).
+# No proxy needed — the codex-openai-proxy plugin is opt-in for users without local Codex CLI.
 
 model:
-  default: openai/gpt-5.5
+  default: gpt-5.5
+  provider: openai-codex
 
 auxiliary:
-  default: openai/gpt-5.4-mini
+  default: gpt-5.4-mini
+  provider: openai-codex
 
 terminal:
   backend: local

@@ -72,15 +72,20 @@ profiles:
     channels: [slack]
     tokens:
       required:
-        - { key: SLACK_BOT_TOKEN,       provider: slack,        wizard: slack_bot     }
-        - { key: SLACK_SIGNING_SECRET,  provider: slack,        wizard: slack_signing }
-        - { key: SLACK_APP_TOKEN,       provider: slack,        wizard: slack_app     }
-        - { key: OPENAI_BASE_URL,       provider: openai-codex, wizard: codex_base_url, default: "http://localhost:8765/v1" }
-        - { key: OPENAI_API_KEY,        provider: openai-codex, wizard: codex_api_key,  default: "sk-codex-proxy-local" }
+        - { key: SLACK_BOT_TOKEN,       provider: slack, wizard: slack_bot     }
+        - { key: SLACK_SIGNING_SECRET,  provider: slack, wizard: slack_signing }
+        - { key: SLACK_APP_TOKEN,       provider: slack, wizard: slack_app     }
       optional:
-        - { key: JINA_API_KEY, provider: jina }
+        # Only needed if you opt-in to the codex-openai-proxy plugin instead of Hermes's
+        # native openai-codex provider. Defaults match the proxy's bundled values.
+        - { key: OPENAI_BASE_URL, provider: openai-codex, wizard: codex_base_url, default: "http://localhost:8765/v1" }
+        - { key: OPENAI_API_KEY,  provider: openai-codex, wizard: codex_api_key,  default: "sk-codex-proxy-local" }
+        - { key: JINA_API_KEY,    provider: jina }
     recommended_plugins:
-      - { id: codex-openai-proxy, default: true }
+      # Deprecated default for 3.1.2+: Hermes ships a native openai-codex provider that talks
+      # straight to chatgpt.com/backend-api/codex from your local Codex CLI OAuth session.
+      # Enable this plugin only if you cannot use Hermes's native provider (e.g., shared host).
+      - { id: codex-openai-proxy, default: false }
 
 plugins:
   honcho-memory:

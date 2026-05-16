@@ -1,15 +1,21 @@
 # seb — Second Brain profile
 
 Slack bot that controls your Obsidian vault and NotebookLM. Powered by gpt-5.5
-via the local Codex CLI proxy.
+via Hermes's native `openai-codex` provider (talks straight to
+`chatgpt.com/backend-api/codex` using your local Codex CLI OAuth session — no
+proxy or API key required).
 
 ## Prerequisites
 
 1. **Hermes** ≥ 0.12.0 installed (`hermes --version`)
-2. **codex CLI** logged in (`codex auth status`) — see the proxy README for install
-3. **Codex proxy running** on `localhost:8765` (`curl http://localhost:8765/v1/models`)
-4. **notebooklm CLI** set up (run `notebooklm setup` if not already done)
-5. **Obsidian vault** at `/Users/genie/Obsidian/second-brain/second-brain/`
+2. **codex CLI** logged in (`codex auth status` — `codex auth login` if not)
+3. **notebooklm CLI** set up (run `notebooklm setup` if not already done)
+4. **Obsidian vault** at `/Users/genie/Obsidian/second-brain/second-brain/`
+
+> The kit-local `codex-openai-proxy` plugin is now **opt-in** (default `false`
+> as of 3.1.2). Enable it only on hosts where Hermes cannot reach the local
+> Codex CLI session (e.g., shared servers); see
+> [`scripts/codex-openai-proxy/README.md`](../../scripts/codex-openai-proxy/README.md).
 
 ## Setup
 

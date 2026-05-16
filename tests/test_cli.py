@@ -32,7 +32,7 @@ overwrite_from_template: [SOUL.md, config.yaml]
 
 def test_version() -> None:
     r = CliRunner().invoke(main, ["--version"])
-    assert r.exit_code == 0 and "3.1.1" in r.output
+    assert r.exit_code == 0 and "3.1.2" in r.output
 
 
 def test_setup_subcommand_exists() -> None:

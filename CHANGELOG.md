@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.2] — 2026-05-16
+
+### Changed
+- **`seb` now uses Hermes's native `openai-codex` provider by default.**
+  `profiles/seb/config.yaml` switches `model.default` from
+  `openai/gpt-5.5` (a model id that Hermes routes via OpenRouter) to
+  `gpt-5.5` with explicit `provider: openai-codex`. Same for `auxiliary`.
+  Result: a fresh `seb chat` works against `chatgpt.com/backend-api/codex`
+  using the local Codex CLI OAuth session — no proxy, no OpenAI API key,
+  no 401.
+- `manifest.yaml`: `OPENAI_BASE_URL` and `OPENAI_API_KEY` moved from
+  `seb.tokens.required` to `tokens.optional`. They are only needed when
+  the user opts in to `codex-openai-proxy`.
+- `manifest.yaml`: `codex-openai-proxy` recommended plugin default
+  flipped to `false`. The plugin is now an opt-in escape hatch for hosts
+  where Hermes can't reach a local Codex CLI session.
+- `profiles/seb/.env.example` no longer prefills `OPENAI_BASE_URL` /
+  `OPENAI_API_KEY` — they're documented as comments for users who switch
+  to proxy mode.
+- `profiles/seb/README.md`, `AGENTS.md`, `scripts/codex-openai-proxy/README.md`
+  rewritten to reflect native-first, proxy-as-escape-hatch.
+
+### Migration
+- Existing `seb` profile installs: edit `~/.hermes/profiles/seb/config.yaml`
+  to remove the `openai/` prefix and add `provider: openai-codex` under
+  both `model` and `auxiliary`. The kit will not auto-patch your
+  populated profile — `hpk setup --force seb` will overwrite the template.
+  Token round shrinks from 3 Slack + 2 OpenAI defaults to just 3 Slack.
+
+### Fixed
+- `seb chat` 401 against `openrouter.ai/api/v1` caused by the
+  `openai/gpt-5.5` model id triggering Hermes's OpenRouter routing
+  instead of honoring `OPENAI_BASE_URL`.
+
 ## [3.1.1] — 2026-05-16
 
 ### Added
@@ -108,7 +142,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AGENTS.md` playbook for LLM-agent-driven setup.
 - Korean `README.md` aimed at human operators.
 
-[Unreleased]: https://github.com/NewTurn2017/hermes-profile-kit/compare/v3.1.1...HEAD
+[Unreleased]: https://github.com/NewTurn2017/hermes-profile-kit/compare/v3.1.2...HEAD
+[3.1.2]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v3.1.2
 [3.1.1]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v3.1.1
 [3.1.0]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v3.1.0
 [3.0.0]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v3.0.0

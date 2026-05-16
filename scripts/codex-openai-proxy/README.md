@@ -1,5 +1,14 @@
 # codex-openai-proxy
 
+> **Status (as of kit 3.1.2): opt-in escape hatch.** Hermes already ships a
+> native `openai-codex` provider that hits `chatgpt.com/backend-api/codex`
+> directly from your local Codex CLI OAuth session — that path is faster
+> and needs no proxy. Use this plugin only when the native path doesn't
+> work for your host (e.g., shared servers where you can't keep a Codex
+> CLI session, or when you want to share one Codex auth across many
+> machines via local HTTP). The kit no longer enables this plugin by
+> default (`default: false` in `manifest.yaml`).
+
 Local OpenAI-compatible HTTP proxy. Translates `/v1/chat/completions` calls from
 Hermes' OpenAI adapter to `codex responses` CLI subprocess calls, reusing your
 existing Codex OAuth session. No separate OpenAI billing key needed.

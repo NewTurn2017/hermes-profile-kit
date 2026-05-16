@@ -58,7 +58,29 @@ def test_doctor_no_profile_omits_profile_checks(runner):
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["ok"] is True
-    assert payload["checks"] == {"mem0_import": True}
+    assert payload["checks"]["mem0_import"] is True
     # profile-specific keys must NOT be present when --profile is omitted
     assert "profile_dir" not in payload["checks"]
     assert "sqlite_healthy" not in payload["checks"]
+
+
+def test_doctor_reports_proxy_mode(runner, monkeypatch):
+    monkeypatch.setenv("MEM0_LLM_BASE_URL", "http://localhost:8765/v1")
+    monkeypatch.setenv("MEM0_EMBEDDER_PROVIDER", "fastembed")
+    result = runner.invoke(cli_mod.main, ["doctor"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["checks"]["llm_mode"] == "proxy"
+    assert payload["checks"]["llm_base_url"] == "http://localhost:8765/v1"
+    assert payload["checks"]["embedder_mode"] == "fastembed"
+
+
+def test_doctor_reports_openai_default_mode(runner, monkeypatch):
+    for k in ("MEM0_LLM_BASE_URL", "MEM0_LLM_API_KEY", "MEM0_LLM_MODEL",
+              "MEM0_EMBEDDER_PROVIDER", "MEM0_EMBEDDER_MODEL"):
+        monkeypatch.delenv(k, raising=False)
+    result = runner.invoke(cli_mod.main, ["doctor"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["checks"]["llm_mode"] == "openai-default"
+    assert payload["checks"]["embedder_mode"] == "openai-default"

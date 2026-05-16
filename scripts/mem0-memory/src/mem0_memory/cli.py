@@ -1,6 +1,7 @@
 """hpk-memory CLI — write paths (add, share-add)."""
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import click
@@ -182,7 +183,7 @@ def share_list_cmd(limit: int) -> None:
 @main.command("doctor")
 @click.option("--profile", required=False, help="If set, also check this profile's store")
 def doctor_cmd(profile: str | None) -> None:
-    checks: dict[str, bool] = {"mem0_import": False}
+    checks: dict[str, Any] = {"mem0_import": False}
     try:
         __import__("mem0")
         checks["mem0_import"] = True
@@ -214,6 +215,11 @@ def doctor_cmd(profile: str | None) -> None:
                 raise SystemExit(2)
             checks["sqlite_healthy"] = True
 
+    llm_base_url = os.environ.get("MEM0_LLM_BASE_URL")
+    embedder_provider = os.environ.get("MEM0_EMBEDDER_PROVIDER")
+    checks["llm_mode"] = "proxy" if llm_base_url else "openai-default"
+    checks["llm_base_url"] = llm_base_url
+    checks["embedder_mode"] = embedder_provider or "openai-default"
     emit(ok(checks=checks))
 
 

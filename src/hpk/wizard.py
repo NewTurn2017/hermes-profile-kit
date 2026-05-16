@@ -11,6 +11,7 @@ from packaging.version import Version
 from hpk import hermes, profiles, tokens, ui
 from hpk import plugins as plugins_mod
 from hpk.manifest import Manifest, Plugin, Profile, TokenSpec
+from hpk.tokens.base import TokenHandler
 
 
 class PreflightError(RuntimeError):
@@ -35,9 +36,11 @@ class NonInteractiveMissingError(PreflightError):
             parts.append("missing required tokens: " + ", ".join(missing))
         if invalid:
             parts.append("invalid token values: " + ", ".join(f"{k} ({why})" for k, why in invalid))
-        super().__init__(
-            "; ".join(parts) + ". Re-run with --token KEY=VAL for each missing/invalid key."
-        )
+        if missing:
+            suffix = " Re-run with --token KEY=VAL for each missing/invalid key."
+        else:
+            suffix = " Fix the value(s) and re-run."
+        super().__init__("; ".join(parts) + "." + suffix)
 
 
 class UnknownTokenKeyError(PreflightError):
@@ -157,7 +160,7 @@ def phase_b_tokens(
         )
 
     missing: list[str] = []
-    invalid: list[tuple[str, str]] = []
+    invalid_required: list[tuple[str, str]] = []
 
     for spec in profile.tokens.required:
         val = _resolve_value(spec, overrides=overrides, env_values=env_values)
@@ -165,7 +168,7 @@ def phase_b_tokens(
             handler = _handler_for(spec)
             r = handler.validate(val)
             if not r.ok:
-                invalid.append((spec.key, r.reason))
+                invalid_required.append((spec.key, r.reason))
                 continue
             profiles.set_env_key(env_path, spec.key, val)
             ui.ok(f"{spec.key} written")
@@ -185,8 +188,10 @@ def phase_b_tokens(
         else:
             ui.warn(f"{spec.key} left as FILL_IN")
 
-    if non_interactive and (missing or invalid):
-        raise NonInteractiveMissingError(missing=missing, invalid=invalid)
+    if non_interactive and (missing or invalid_required):
+        raise NonInteractiveMissingError(missing=missing, invalid=invalid_required)
+
+    invalid_optional: list[tuple[str, str]] = []
 
     for spec in profile.tokens.optional:
         val = _resolve_value(spec, overrides=overrides, env_values=env_values)
@@ -195,7 +200,7 @@ def phase_b_tokens(
             r = handler.validate(val)
             if not r.ok:
                 if non_interactive:
-                    invalid.append((spec.key, r.reason))
+                    invalid_optional.append((spec.key, r.reason))
                 else:
                     ui.warn(f"{spec.key} invalid ({r.reason}) — left as-is")
                 continue
@@ -209,8 +214,8 @@ def phase_b_tokens(
             profiles.set_env_key(env_path, spec.key, v)
             ui.ok(f"{spec.key} written")
 
-    if non_interactive and invalid:
-        raise NonInteractiveMissingError(missing=[], invalid=invalid)
+    if non_interactive and invalid_optional:
+        raise NonInteractiveMissingError(missing=[], invalid=invalid_optional)
 
 
 def _resolve_value(
@@ -219,7 +224,7 @@ def _resolve_value(
     overrides: dict[str, str],
     env_values: dict[str, str],
 ) -> str | None:
-    """Precedence: --token (highest) > --env-file > manifest default > None."""
+    """Precedence: --token (highest) > --env-file > None (caller applies manifest default)."""
     if spec.key in overrides:
         return overrides[spec.key]
     if spec.key in env_values:
@@ -227,7 +232,7 @@ def _resolve_value(
     return None  # manifest default is applied later only under non-interactive
 
 
-def _handler_for(spec: TokenSpec):  # type: ignore[no-untyped-def]
+def _handler_for(spec: TokenSpec) -> TokenHandler:
     return (
         tokens.get_handler(provider=spec.provider, wizard=spec.wizard)
         if spec.wizard

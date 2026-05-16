@@ -181,9 +181,11 @@ def test_phase_c_accept_flag_overrides_default_false(tmp_path, monkeypatch):
     assert asked == []  # never prompted in non-interactive
 
 
-def test_phase_c_reject_beats_accept_on_same_id(tmp_path, monkeypatch, capsys):
+def test_phase_c_reject_beats_accept_on_same_id(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     p = _seb_profile()
+    warnings: list[str] = []
+    monkeypatch.setattr(wizard.ui, "warn", lambda msg: warnings.append(msg))
     phase_c_plugins(
         p,
         _make_catalog(),
@@ -191,9 +193,7 @@ def test_phase_c_reject_beats_accept_on_same_id(tmp_path, monkeypatch, capsys):
         accepted_plugins={"codex-openai-proxy"},
         rejected_plugins={"codex-openai-proxy"},
     )
-    captured = capsys.readouterr().out
-    assert "codex-openai-proxy" in captured
-    assert "skipped" in captured.lower() or "reject" in captured.lower()
+    assert any("codex-openai-proxy" in w and "reject" in w.lower() for w in warnings)
 
 
 def test_phase_c_unknown_plugin_id_in_flags_raises(tmp_path, monkeypatch):

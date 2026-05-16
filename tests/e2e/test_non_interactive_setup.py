@@ -47,6 +47,10 @@ _SIGN = "a" * 32
 _APP = "xapp-" + "0" * 30
 
 
+def _explode(*_a: object, **_kw: object) -> None:
+    raise AssertionError("interactive prompt called during --non-interactive run")
+
+
 def _scaffold(tmp_path: Path) -> None:
     (tmp_path / "manifest.yaml").write_text(_MANIFEST_YAML)
     tpl = tmp_path / "profiles" / "seb"
@@ -72,9 +76,6 @@ def test_e2e_seb_non_interactive_completes_with_zero_interactive_reads(
 
     # Boobytrap every interactive entry point — touching any of these is the failure mode
     # this test is meant to catch.
-    def _explode(*a, **kw):
-        raise AssertionError("interactive prompt called during --non-interactive run")
-
     from hpk import wizard
 
     monkeypatch.setattr(wizard, "_prompt_secret", _explode)
@@ -109,16 +110,15 @@ def test_e2e_seb_non_interactive_completes_with_zero_interactive_reads(
 
     # hermes was called to create the profile, NOT to install the kit-local proxy.
     assert ["hermes", "profile", "create", "seb"] in fake_hermes.calls
-    assert "codex-openai-proxy" not in str(fake_hermes.calls)
+    assert all("codex-openai-proxy" not in arg for cmd in fake_hermes.calls for arg in cmd), (
+        f"unexpected codex-openai-proxy in hermes calls: {fake_hermes.calls}"
+    )
 
 
 def test_e2e_seb_non_interactive_env_file_alone_suffices(fake_hermes, tmp_path, monkeypatch):
     _scaffold(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("hpk.wizard._has_local_bin_on_path", lambda: True)
-
-    def _explode(*a, **kw):
-        raise AssertionError("interactive prompt called during --non-interactive run")
 
     from hpk import wizard
 

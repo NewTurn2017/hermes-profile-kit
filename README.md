@@ -5,6 +5,8 @@ Interactive multi-profile setup utility for [Hermes Agent](https://github.com/No
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![CI](https://github.com/NewTurn2017/hermes-profile-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/NewTurn2017/hermes-profile-kit/actions/workflows/ci.yml)
 
+> 🇰🇷 [한국어 README](README.ko.md)
+
 ## Quick start
 
 ```bash

@@ -82,7 +82,12 @@ def setup(
     reject_plugins: tuple[str, ...],
     non_interactive: bool,
 ) -> None:
-    """Interactive multi-profile setup. See README's '2-minute install' for non-interactive use."""
+    """Set up Hermes profiles.
+
+    Interactive by default — prompts for tokens and plugin choices. For an
+    unattended run (e.g., from Claude Code), combine --non-interactive with
+    --token KEY=VAL, --env-file PATH, --accept-plugin ID, --reject-plugin ID.
+    """
     manifest = _load()
 
     token_overrides: dict[str, str] = {}
@@ -91,10 +96,14 @@ def setup(
             ui.err(f"--token expects KEY=VAL, got: {kv!r}")
             sys.exit(40)
         key, _, val = kv.partition("=")
+        if not val:
+            ui.err(f"--token {key}=: value is empty")
+            sys.exit(40)
         token_overrides[key] = val
 
     env_file_values: dict[str, str] = {}
     if env_file_path is not None:
+        # deferred import to mirror doctor/reset lazy pattern and keep --help fast
         from hpk.env_file import EnvFileParseError, load_env_file
 
         try:
@@ -116,6 +125,7 @@ def setup(
             accepted_plugins=set(accept_plugins),
             rejected_plugins=set(reject_plugins),
         )
+        # Specific exceptions first — each PreflightError subclass below maps to its own exit code.
     except wizard.HermesNotInstalledError as e:
         ui.err(str(e))
         sys.exit(10)

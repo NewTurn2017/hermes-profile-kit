@@ -198,6 +198,18 @@ def test_setup_non_interactive_unknown_plugin_exits_40(fake_hermes, tmp_path, mo
     assert "ghost-plugin" in r.output
 
 
+def test_setup_token_with_empty_value_exits_40(fake_hermes, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _scaffold_seb_min(tmp_path)
+    monkeypatch.setattr("hpk.wizard._has_local_bin_on_path", lambda: True)
+    r = CliRunner().invoke(
+        main,
+        ["setup", "seb", "--non-interactive", "--token", "SLACK_BOT_TOKEN="],
+    )
+    assert r.exit_code == 40, r.output
+    assert "empty" in r.output.lower() or "SLACK_BOT_TOKEN" in r.output
+
+
 def test_setup_env_file_loaded_and_token_flag_wins(fake_hermes, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _scaffold_seb_min(tmp_path)

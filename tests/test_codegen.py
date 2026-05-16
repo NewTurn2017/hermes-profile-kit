@@ -79,3 +79,43 @@ def test_validate_detects_missing():
     }
     missing = find_missing_commands(plugins, [])
     assert missing == ["x"]
+
+
+def test_validate_token_boundary_no_substring_false_positive():
+    from hpk.codegen.validate import find_missing_commands
+    from hpk.manifest import Plugin
+
+    # Existing index path is "honcho"; plugin command's last token is "honchoplus"
+    # The old endswith logic would have matched; the new boundary-aware logic should not.
+    plugins = {
+        "plus": Plugin(
+            description="d",
+            upstream_command="hermes setup honchoplus",
+            verified_in_upstream=True,
+        )
+    }
+    index = [{"path": "setup honcho", "params": [], "help": "", "hidden": False}]
+    missing = find_missing_commands(plugins, index)
+    assert missing == ["plus"]
+
+
+def test_validate_exact_match_still_works():
+    from hpk.codegen.validate import find_missing_commands
+    from hpk.manifest import Plugin
+
+    plugins = {
+        "ok": Plugin(
+            description="d",
+            upstream_command="hermes -p {profile} memory setup honcho",
+            verified_in_upstream=True,
+        )
+    }
+    index = [
+        {
+            "path": "-p memory setup honcho",
+            "params": [],
+            "help": "",
+            "hidden": False,
+        }
+    ]
+    assert find_missing_commands(plugins, index) == []

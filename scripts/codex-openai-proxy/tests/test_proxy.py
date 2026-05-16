@@ -28,20 +28,19 @@ def test_list_models_returns_configured_models(client):
 
 # ── /v1/chat/completions (non-streaming) ──────────────────────────────────────
 
-def _fake_popen(stdout_text: str, returncode: int = 0):
-    """Return a mock Popen that produces a fixed stdout."""
+def _fake_popen(agent_text: str = "Hello world", returncode: int = 0, stderr: bytes = b""):
+    """Mock Popen returning codex-exec-style JSONL stdout."""
     mock = MagicMock()
-    mock.communicate.return_value = (
+    jsonl = b"\n".join([
+        b'{"type":"thread.started","thread_id":"x"}',
+        b'{"type":"turn.started"}',
         json.dumps({
-            "output": [
-                {
-                    "type": "message",
-                    "content": [{"type": "output_text", "text": stdout_text}],
-                }
-            ]
+            "type": "item.completed",
+            "item": {"id": "i0", "type": "agent_message", "text": agent_text},
         }).encode(),
-        b"",
-    )
+        b'{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":2}}',
+    ])
+    mock.communicate.return_value = (jsonl, stderr)
     mock.returncode = returncode
     return mock
 
@@ -70,20 +69,21 @@ def test_chat_completions_passes_model_to_codex(client):
     assert "gpt-5.4-mini" in call_args
 
 
-def test_system_message_becomes_instructions(client):
-    captured = {}
-    def fake_popen(cmd, stdin, stdout, stderr):
-        # Read stdin to check what was sent to codex
+def test_system_message_renders_into_stdin_prompt(client):
+    """System messages are rendered as [system]\\n{text} blocks in the codex exec stdin."""
+    captured: dict = {}
+
+    def capturing_popen(cmd, **kwargs):
         mock = _fake_popen("ok")
-        original_communicate = mock.communicate
+        original = mock.communicate
         def capturing_communicate(input_data=None):
-            if input_data:
-                captured["payload"] = json.loads(input_data.decode())
-            return original_communicate(input_data)
+            if input_data is not None:
+                captured["stdin"] = input_data.decode()
+            return original(input_data)
         mock.communicate = capturing_communicate
         return mock
 
-    with patch("subprocess.Popen", side_effect=fake_popen):
+    with patch("subprocess.Popen", side_effect=capturing_popen):
         client.post("/v1/chat/completions", json={
             "model": "gpt-5.5",
             "messages": [
@@ -91,7 +91,7 @@ def test_system_message_becomes_instructions(client):
                 {"role": "user", "content": "Hi"},
             ],
         })
-    assert captured.get("payload", {}).get("instructions") == "You are helpful"
+    assert captured["stdin"] == "[system]\nYou are helpful\n\n[user]\nHi"
 
 
 def test_codex_auth_error_returns_502_with_hint(client):
@@ -104,7 +104,7 @@ def test_codex_auth_error_returns_502_with_hint(client):
             "messages": [{"role": "user", "content": "hi"}],
         })
     assert r.status_code == 502
-    assert "codex auth login" in r.json()["detail"]["error"]["message"]
+    assert "codex login" in r.json()["detail"]["error"]["message"]
 
 
 def test_codex_not_found_returns_502(client):
@@ -240,3 +240,21 @@ def test_parse_codex_jsonl_events_ignores_malformed_lines():
     text, error = _parse_codex_jsonl_events(stdout)
     assert text == "ok"
     assert error is None
+
+
+def test_chat_completions_invokes_codex_exec(client):
+    captured: dict = {}
+
+    def fake_popen_factory(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return _fake_popen("ok")
+
+    with patch("subprocess.Popen", side_effect=fake_popen_factory):
+        r = client.post(
+            "/v1/chat/completions",
+            json={"model": "gpt-5.5", "messages": [{"role": "user", "content": "hi"}]},
+        )
+    assert r.status_code == 200
+    assert captured["cmd"][:2] == ["codex", "exec"]
+    assert "--json" in captured["cmd"]
+    assert "-m" in captured["cmd"] and "gpt-5.5" in captured["cmd"]

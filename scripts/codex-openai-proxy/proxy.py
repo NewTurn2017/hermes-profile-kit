@@ -112,12 +112,12 @@ async def chat_completions(request: Request):
     body = await request.json()
     model: str = body.get("model", MODELS[0])
     stream: bool = body.get("stream", False)
-    payload = _to_responses_payload(body)
-    stdin_data = json.dumps(payload).encode()
+    args, stdin = _to_codex_exec_invocation(body)
+    stdin_bytes = stdin.encode()
 
     try:
         proc = subprocess.Popen(
-            ["codex", "responses", "--model", model, "--input-json", "-"],
+            ["codex", "exec", *args],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -135,34 +135,36 @@ async def chat_completions(request: Request):
 
     if stream:
         return StreamingResponse(
-            _stream(proc, stdin_data, model),
+            _stream(proc, stdin_bytes, model),
             media_type="text/event-stream",
         )
 
-    # Non-streaming: wait for full response.
-    stdout, stderr = proc.communicate(stdin_data)
+    stdout, stderr = proc.communicate(stdin_bytes)
     if proc.returncode != 0:
         if _is_auth_error(stderr):
             raise HTTPException(
                 502,
                 detail={
-                    "error": {
-                        "message": "Run `codex auth login` first",
-                        "type": "codex_auth_required",
-                    }
+                    "error": {"message": "Run `codex login` first", "type": "codex_auth_required"}
                 },
             )
         raise HTTPException(
             502,
             detail={
                 "error": {
-                    "message": stderr.decode(errors="replace").strip(),
+                    "message": stderr.decode(errors="replace").strip()
+                              or "codex exec exited non-zero with no stderr",
                     "type": "codex_error",
                 }
             },
         )
 
-    content = _extract_content(stdout)
+    content, error = _parse_codex_jsonl_events(stdout)
+    if error:
+        raise HTTPException(
+            502, detail={"error": {"message": error, "type": "codex_error"}}
+        )
+
     return {
         "id": "chatcmpl-codex",
         "object": "chat.completion",
@@ -179,22 +181,25 @@ async def chat_completions(request: Request):
 
 
 async def _stream(proc: subprocess.Popen, stdin_data: bytes, model: str):
-    """Yield OpenAI SSE chunks wrapping the full Codex response."""
+    """Wait for codex exec to finish, then emit OpenAI SSE chunks."""
     loop = asyncio.get_running_loop()
     stdout, stderr = await loop.run_in_executor(None, proc.communicate, stdin_data)
 
     if proc.returncode != 0:
         error_text = (
-            "Run `codex auth login` first" if _is_auth_error(stderr)
-            else stderr.decode(errors="replace").strip()
+            "Run `codex login` first" if _is_auth_error(stderr)
+            else stderr.decode(errors="replace").strip() or "codex exec exited non-zero"
         )
         yield f"data: {json.dumps({'error': {'message': error_text, 'type': 'codex_error'}})}\n\n"
         yield "data: [DONE]\n\n"
         return
 
-    content = _extract_content(stdout)
+    content, error = _parse_codex_jsonl_events(stdout)
+    if error:
+        yield f"data: {json.dumps({'error': {'message': error, 'type': 'codex_error'}})}\n\n"
+        yield "data: [DONE]\n\n"
+        return
 
-    # Content chunk.
     chunk = json.dumps({
         "id": "chatcmpl-codex",
         "object": "chat.completion.chunk",
@@ -209,7 +214,6 @@ async def _stream(proc: subprocess.Popen, stdin_data: bytes, model: str):
     })
     yield f"data: {chunk}\n\n"
 
-    # Stop chunk.
     stop = json.dumps({
         "id": "chatcmpl-codex",
         "object": "chat.completion.chunk",

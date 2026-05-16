@@ -1,3 +1,4 @@
+# ruff: noqa: E501  # Long lines are inside a YAML manifest string fixture; wrapping would distort YAML structure.
 """E2E: hpk setup seb — schema v3, openai-codex tokens, kit-local plugin."""
 
 from __future__ import annotations

@@ -144,9 +144,9 @@ def test_phase_b_uses_token_default_on_empty_input(fake_hermes, tmp_path, monkey
     (home / ".env").write_text("OPENAI_API_KEY=FILL_IN_OPENAI_API_KEY\n")
     monkeypatch.setenv("HOME", str(tmp_path))
 
-    from hpk.manifest import Profile, TokenSpec, TokensSection
     from hpk import wizard
-    from hpk.tokens.base import TokenHandler, ValidationResult
+    from hpk.manifest import Profile, TokenSpec, TokensSection
+    from hpk.tokens.base import ValidationResult
 
     class _FakeCodexKeyHandler:
         key = "OPENAI_API_KEY"
@@ -190,16 +190,13 @@ def test_phase_b_uses_token_default_on_empty_input(fake_hermes, tmp_path, monkey
 def test_phase_c_kit_local_plugin_prints_instructions(fake_hermes, tmp_path, monkeypatch, capsys):
     """Kit-local plugins (install_path, not verified) should print instructions, not exec."""
     monkeypatch.setenv("HOME", str(tmp_path))
+    from hpk import wizard
     from hpk.manifest import (
-        KitMeta,
-        Manifest,
         Plugin,
         Profile,
         RecommendedPlugin,
-        Upstream,
         TokensSection,
     )
-    from hpk import wizard
 
     plugin = Plugin(
         description="local proxy",
@@ -219,7 +216,10 @@ def test_phase_c_kit_local_plugin_prints_instructions(fake_hermes, tmp_path, mon
         recommended_plugins=[RecommendedPlugin(id="codex-openai-proxy", default=True)],
     )
     # User says "yes" to installing
-    monkeypatch.setattr("questionary.confirm", lambda msg, default=True: type("A", (), {"ask": lambda self: True})())
+    def _yes_confirm(msg, default=True):
+        return type("A", (), {"ask": lambda self: True})()
+
+    monkeypatch.setattr("questionary.confirm", _yes_confirm)
     wizard.phase_c_plugins(profile, {"codex-openai-proxy": plugin})
 
     # Should NOT raise; should NOT call hermes

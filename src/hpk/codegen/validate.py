@@ -16,6 +16,9 @@ def find_missing_commands(plugins: dict[str, Plugin], cmd_index: list[dict[str, 
     paths = {n["path"] for n in cmd_index}
     missing: list[str] = []
     for pid, plugin in plugins.items():
+        if plugin.upstream_command is None:
+            # Kit-local plugins (install_path) have nothing to validate against upstream.
+            continue
         normalized = _normalize_cmd(plugin.upstream_command)
         if not any(normalized.endswith(p) or p == normalized for p in paths):
             missing.append(pid)

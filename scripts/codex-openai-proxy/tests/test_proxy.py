@@ -4,7 +4,6 @@ Codex CLI calls are mocked — no real 'codex' binary required."""
 from __future__ import annotations
 
 import json
-import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -34,7 +33,12 @@ def _fake_popen(stdout_text: str, returncode: int = 0):
     mock = MagicMock()
     mock.communicate.return_value = (
         json.dumps({
-            "output": [{"type": "message", "content": [{"type": "output_text", "text": stdout_text}]}]
+            "output": [
+                {
+                    "type": "message",
+                    "content": [{"type": "output_text", "text": stdout_text}],
+                }
+            ]
         }).encode(),
         b"",
     )
@@ -43,7 +47,7 @@ def _fake_popen(stdout_text: str, returncode: int = 0):
 
 
 def test_chat_completions_non_streaming_returns_content(client):
-    with patch("subprocess.Popen", return_value=_fake_popen("Hello world")) as mock_popen:
+    with patch("subprocess.Popen", return_value=_fake_popen("Hello world")):
         r = client.post("/v1/chat/completions", json={
             "model": "gpt-5.5",
             "messages": [{"role": "user", "content": "Hello"}],
@@ -70,7 +74,6 @@ def test_system_message_becomes_instructions(client):
     captured = {}
     def fake_popen(cmd, stdin, stdout, stderr):
         # Read stdin to check what was sent to codex
-        import io
         mock = _fake_popen("ok")
         original_communicate = mock.communicate
         def capturing_communicate(input_data=None):

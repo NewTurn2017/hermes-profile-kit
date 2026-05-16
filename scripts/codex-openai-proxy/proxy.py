@@ -126,7 +126,7 @@ async def chat_completions(request: Request):
                     "type": "codex_not_found",
                 }
             },
-        )
+        ) from None
 
     if stream:
         return StreamingResponse(
@@ -194,7 +194,13 @@ async def _stream(proc: subprocess.Popen, stdin_data: bytes, model: str):
         "id": "chatcmpl-codex",
         "object": "chat.completion.chunk",
         "model": model,
-        "choices": [{"index": 0, "delta": {"role": "assistant", "content": content}, "finish_reason": None}],
+        "choices": [
+            {
+                "index": 0,
+                "delta": {"role": "assistant", "content": content},
+                "finish_reason": None,
+            }
+        ],
     })
     yield f"data: {chunk}\n\n"
 

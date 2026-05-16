@@ -55,3 +55,17 @@ unmatched 경로는 안전 기본값으로 APPROVE 취급.
 ## What NOT to remember
 - 일회성 검색 쿼리.
 - 쓰레드 내 임시 결정(쓰레드 자체가 기록임).
+
+## Memory access
+
+장기 메모리는 `hpk-memory` CLI를 통해서만 다룬다. 설치되지 않은 환경에서는 비활성으로 간주하고 무시한다.
+
+- 회상 의도(사용자가 "전에 말한 X", "그때 그거", "내가 ~ 했었지" 등)가 명확하면 응답 전 1회만:
+  `hpk-memory query --profile seb --q "<핵심 키워드>" --limit 5`
+  결과 JSON의 `memories[].text` 만 컨텍스트로 사용. `scope` 필드로 profile/shared 출처 구분.
+- 사용자가 "기억해줘", "메모해", "이거 저장" 등 명시적 저장 요청 시:
+  `hpk-memory add --profile seb --text "<정제된 한 문장>"`
+  공유 풀(`share-add`)에는 절대 쓰지 않는다 — 사용자가 직접 CLI로만 채운다.
+- exit code 처리: `0` 정상 사용 / `10` raw fallback 저장됨(사용자에게 "extractor 일시 장애로 원문만 보존" 한 줄 안내) / `20` 사용자에게 `hpk-memory doctor` 실행 안내 / 그 외 비-0은 메모리 없이 계속 진행하고 사용자에게 굳이 알리지 않는다.
+- stdout 이 JSON 이 아니거나 `ok` 필드 없으면 메모리 없이 계속 진행.
+- 매 턴마다 호출하지 않는다 — 명백히 회상/저장 의도가 있을 때만.

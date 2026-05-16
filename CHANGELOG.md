@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] — 2026-05-16
+
+### Added
+- `mem0-memory` kit-local plugin (`scripts/mem0-memory/`): per-profile + read-only shared memory via local mem0 (OSS, Chroma + SQLite, zero external tokens).
+- `hpk-memory` CLI with six subcommands (`add`, `query`, `list`, `share-add`, `share-list`, `doctor`); JSON-only stdout; documented exit codes (`0/1/2/10/20`).
+- Cross-profile demo and recovery procedure in `scripts/mem0-memory/README.md`.
+- `seb` profile gains an optional `mem0-memory` entry in `recommended_plugins` (`default: false`).
+- `seb` SOUL gains a "Memory access" section instructing the model to call `hpk-memory` through its existing `shell` tool only on clear recall/save intent.
+
+### Notes
+- `honcho-memory` remains the upstream-verified default memory provider for `assistant` and `research`. `mem0-memory` is an additive second option, not a replacement.
+- No changes to `src/hpk/*.py`, `profiles/seb/config.yaml`, or upstream Hermes. The plugin runner's existing "install manually" path is reused.
+
 ## [3.1.2] — 2026-05-16
 
 ### Changed
@@ -142,7 +155,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AGENTS.md` playbook for LLM-agent-driven setup.
 - Korean `README.md` aimed at human operators.
 
-[Unreleased]: https://github.com/NewTurn2017/hermes-profile-kit/compare/v3.1.2...HEAD
+[Unreleased]: https://github.com/NewTurn2017/hermes-profile-kit/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v3.2.0
 [3.1.2]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v3.1.2
 [3.1.1]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v3.1.1
 [3.1.0]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v3.1.0

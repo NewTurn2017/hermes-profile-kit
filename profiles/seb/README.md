@@ -19,46 +19,35 @@ hpk setup seb
 
 The wizard will ask for three Slack tokens. Follow the steps below to get them.
 
-## Slack App creation (one-time)
+## Slack App creation (one-time, ~2 min via manifest)
 
-### 1. Create the app
+### 1. Create the app from the bundled manifest
 
-Go to <https://api.slack.com/apps> → **Create New App** → **From scratch**.
+Go to <https://api.slack.com/apps> → **Create New App** → **From an app
+manifest** → pick your workspace → paste the contents of
+[`slack-app-manifest.json`](slack-app-manifest.json) → **Next** → **Create**.
 
-- App name: `seb` (or any name you like)
-- Workspace: your personal workspace
+This single step provisions bot user, scopes (`app_mentions:read`,
+`chat:write`, `files:read`), `app_mention` event subscription, Socket Mode,
+and interactivity — everything except the three secrets you still need to
+copy out.
 
-### 2. Enable Socket Mode
+### 2. Install + grab `SLACK_BOT_TOKEN`
 
-Under **Settings → Socket Mode**, toggle **Enable Socket Mode** on. You'll be
-asked to create an App-Level Token — name it anything (e.g. `seb-socket`), add
-scope `connections:write`, click **Generate**. Copy the `xapp-...` token
-(**SLACK_APP_TOKEN**).
+Left sidebar → **Install App** → **Install to Workspace** → Allow → copy the
+**Bot User OAuth Token** (`xoxb-...`). This is **`SLACK_BOT_TOKEN`**.
 
-### 3. Add bot scopes
+### 3. Generate `SLACK_APP_TOKEN` (app-level, for Socket Mode)
 
-Under **Features → OAuth & Permissions → Scopes → Bot Token Scopes**, add:
+Slack does not let manifests create app-level tokens. Do it once by hand:
+**Basic Information → App-Level Tokens → Generate Token and Scopes** →
+any name (e.g. `seb-socket`) → add scope `connections:write` → **Generate**
+→ copy the `xapp-...` token. This is **`SLACK_APP_TOKEN`**.
 
-| Scope | Why |
-|---|---|
-| `app_mentions:read` | Receive @seb mentions |
-| `chat:write` | Post messages + Block Kit cards |
-| `files:read` | Read file content from channels |
+### 4. Reveal `SLACK_SIGNING_SECRET`
 
-### 4. Subscribe to events
-
-Under **Features → Event Subscriptions**, toggle on. Under
-**Subscribe to bot events**, add `app_mention`.
-
-### 5. Install the app
-
-Under **Features → OAuth & Permissions** → **Install to Workspace** → Allow.
-Copy the **Bot User OAuth Token** (`xoxb-...`) (**SLACK_BOT_TOKEN**).
-
-### 6. Get the Signing Secret
-
-Under **Settings → Basic Information → App Credentials**, reveal and copy the
-**Signing Secret** (32-char hex) (**SLACK_SIGNING_SECRET**).
+**Basic Information → App Credentials → Signing Secret → Show** → copy the
+32-char hex string. This is **`SLACK_SIGNING_SECRET`**.
 
 ## Start the bot
 

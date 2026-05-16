@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.1] — 2026-05-16
+
+### Added
+- `profiles/seb/slack-app-manifest.json` — paste-ready Slack App manifest
+  that provisions bot scopes, `app_mention` event subscription, Socket
+  Mode, and interactivity in one step via `https://api.slack.com/apps`
+  → Create New App → From an app manifest.
+- `AGENTS.md` seb fast-path now tells AI agents to surface the manifest
+  flow first (saves ~5 manual scope clicks).
+
+### Changed
+- `profiles/seb/README.md` Slack App section rewritten around the manifest
+  flow; the per-scope click instructions are replaced by a single paste
+  step plus three secret-retrieval steps.
+
 ## [3.1.0] — 2026-05-16
 
 ### Added
@@ -93,7 +108,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AGENTS.md` playbook for LLM-agent-driven setup.
 - Korean `README.md` aimed at human operators.
 
-[Unreleased]: https://github.com/NewTurn2017/hermes-profile-kit/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/NewTurn2017/hermes-profile-kit/compare/v3.1.1...HEAD
+[3.1.1]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v3.1.1
 [3.1.0]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v3.1.0
 [3.0.0]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v3.0.0
 [2.0.0]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v2.0.0

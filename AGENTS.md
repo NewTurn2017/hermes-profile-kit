@@ -32,8 +32,14 @@ hpk setup seb --non-interactive \
 hpk verify seb
 ```
 
-3 Slack tokens come from the user's Slack App
-(https://api.slack.com/apps → your app → OAuth & Basic Info).
+3 Slack tokens come from the user's Slack App. Fastest path: tell the
+user to create the app from `profiles/seb/slack-app-manifest.json` at
+<https://api.slack.com/apps> → Create New App → From an app manifest →
+paste the JSON. That provisions all bot scopes, `app_mention` event,
+Socket Mode, and interactivity in one step; the user then copies
+`SLACK_BOT_TOKEN` (Install App), `SLACK_APP_TOKEN` (Basic Information →
+App-Level Tokens → Generate with `connections:write`), and
+`SLACK_SIGNING_SECRET` (Basic Information → App Credentials).
 `OPENAI_BASE_URL` / `OPENAI_API_KEY` use manifest defaults.
 
 ## Fast-paths: other profiles

@@ -43,7 +43,7 @@ Paste into Claude Code or `codex`. One token round, done.
 
 ```yaml
 package: hermes-profile-kit
-version: 3.1.0
+version: 3.1.1
 schema_version: 3
 language: python>=3.10
 cli_entrypoint: hpk

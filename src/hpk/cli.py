@@ -35,21 +35,16 @@ def main(ctx: click.Context) -> None:
 
 @main.command()
 @click.argument("profile", nargs=-1)
-@click.option("--non-interactive", is_flag=True, help="Read tokens from env vars only.")
-@click.option("--dry-run", is_flag=True, help="Show actions without changing state.")
 @click.option("--force", is_flag=True, help="Overwrite SOUL.md/config.yaml even if present.")
 @click.option("--skip-tokens", is_flag=True)
 @click.option("--skip-plugins", is_flag=True)
 def setup(
     profile: tuple[str, ...],
-    non_interactive: bool,
-    dry_run: bool,
     force: bool,
     skip_tokens: bool,
     skip_plugins: bool,
 ) -> None:
     """Interactive multi-profile setup."""
-    del non_interactive, dry_run  # accepted but not yet wired through
     manifest = _load()
     try:
         wizard.run_wizard(

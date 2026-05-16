@@ -60,7 +60,8 @@ class Store:
     # Filesystem
     dir: Path             # ~/.hermes/profiles/<p>/memory  OR  ~/.hermes/shared/memory
     scope_name: str       # "profile" or "shared"
-    scope_kwargs: dict    # {"agent_id": "<profile>"} or {"app_id": "hermes-shared"}
+    scope_kwargs: dict    # {"agent_id": "<profile>"} or {"agent_id": "hermes-shared"}
+                          # (mem0 OSS has no app_id; shared pool uses a virtual agent)
 
     def config(self) -> dict: ...
     def add(self, text: str, *, user_id: str | None = None, meta: dict | None = None) -> dict: ...
@@ -96,13 +97,17 @@ Memory item shape (returned inside `memories: [...]`):
 **Files:**
 - Create: `scripts/mem0-memory/pyproject.toml`
 - Create: `scripts/mem0-memory/src/mem0_memory/__init__.py`
+- Create: `scripts/mem0-memory/tests/__init__.py` (empty — matches `scripts/codex-openai-proxy/tests/`)
 - Create: `scripts/mem0-memory/tests/conftest.py`
 - Create: `scripts/mem0-memory/tests/test_smoke.py` (gets deleted at end of task)
 
-- [ ] **Step 1: Create the directory tree**
+**mem0 OSS API note (v2.0.2, verified at plan time):** `Memory.search` and `Memory.get_all` accept `top_k=` (not `limit=`) and `filters: dict | None` (scope goes inside `filters`, not as top-level kwargs). `Memory.add` accepts top-level `user_id`, `agent_id`, `run_id` but **does not** have an `app_id` parameter. Throughout this plan, the "shared pool" is therefore keyed by `agent_id="hermes-shared"` (a virtual agent), not `app_id`. Filesystem isolation (separate dir) remains the primary safety boundary. The returned-item shape keeps an `app_id` field for forward compatibility with hosted mem0, always `None` in OSS.
+
+- [ ] **Step 1: Create the directory tree and empty `tests/__init__.py`**
 
 ```bash
 mkdir -p scripts/mem0-memory/src/mem0_memory scripts/mem0-memory/tests
+: > scripts/mem0-memory/tests/__init__.py
 ```
 
 - [ ] **Step 2: Write `scripts/mem0-memory/pyproject.toml`**
@@ -149,7 +154,6 @@ __version__ = "0.1.0"
 """Shared pytest fixtures for the mem0-memory plugin."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -166,7 +170,8 @@ def hermes_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 class FakeMemory:
     """In-memory stand-in for mem0.Memory used by Store unit tests.
 
-    Records add() calls, returns deterministic search() results filtered by scope kwargs.
+    Mirrors the real mem0 v2 API: add() takes scope IDs as top-level kwargs;
+    search()/get_all() take top_k=int and filters=dict.
     """
 
     def __init__(self, config: dict[str, Any]) -> None:
@@ -180,17 +185,17 @@ class FakeMemory:
         self.added.append(rec)
         return {"results": [{"id": rec["id"], "memory": messages, "event": "ADD"}]}
 
-    def search(self, query: str, *, limit: int = 5, **kwargs: Any) -> dict[str, Any]:
-        scope_keys = {"user_id", "agent_id", "app_id", "run_id"}
-        scope = {k: v for k, v in kwargs.items() if k in scope_keys}
+    def search(self, query: str, *, top_k: int = 20, filters: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
+        scope_keys = {"user_id", "agent_id", "run_id"}
+        scope = {k: v for k, v in (filters or {}).items() if k in scope_keys}
         results: list[dict[str, Any]] = []
         for rec in self.added:
             if all(rec.get(k) == v for k, v in scope.items()):
                 results.append({"id": rec["id"], "memory": rec["messages"], "score": 0.9})
-        return {"results": results[:limit]}
+        return {"results": results[:top_k]}
 
-    def get_all(self, **kwargs: Any) -> dict[str, Any]:
-        return self.search("", limit=1000, **kwargs)
+    def get_all(self, *, top_k: int = 1000, filters: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
+        return self.search("", top_k=top_k, filters=filters)
 
 
 @pytest.fixture
@@ -233,7 +238,10 @@ rm scripts/mem0-memory/tests/test_smoke.py
 - [ ] **Step 8: Commit**
 
 ```bash
-git add scripts/mem0-memory/pyproject.toml scripts/mem0-memory/src/mem0_memory/__init__.py scripts/mem0-memory/tests/conftest.py
+git add scripts/mem0-memory/pyproject.toml \
+        scripts/mem0-memory/src/mem0_memory/__init__.py \
+        scripts/mem0-memory/tests/__init__.py \
+        scripts/mem0-memory/tests/conftest.py
 git commit -m "feat(mem0-memory): scaffold kit-local plugin package"
 ```
 
@@ -365,7 +373,8 @@ def test_shared_store_uses_shared_dir(hermes_home, fake_memory_factory):
     s = Store(shared=True, memory_factory=fake_memory_factory)
     assert s.dir == shared_memory_dir()
     assert s.scope_name == "shared"
-    assert s.scope_kwargs == {"app_id": "hermes-shared"}
+    # mem0 v2 OSS does not expose app_id; the shared pool is keyed by a virtual agent
+    assert s.scope_kwargs == {"agent_id": "hermes-shared"}
 
 
 def test_config_chroma_path_under_dir(hermes_home, fake_memory_factory):
@@ -380,7 +389,13 @@ def test_add_passes_scope_kwargs_to_mem0(hermes_home, fake_memory_factory):
     s.add("hello")
     fake = fake_memory_factory.instances[-1]
     assert fake.added[0]["agent_id"] == "seb"
-    assert "app_id" not in fake.added[0]
+
+
+def test_shared_add_uses_virtual_agent_id(hermes_home, fake_memory_factory):
+    s = Store(shared=True, memory_factory=fake_memory_factory)
+    s.add("global")
+    fake = fake_memory_factory.instances[-1]
+    assert fake.added[0]["agent_id"] == "hermes-shared"
 
 
 def test_add_passes_user_id_and_meta(hermes_home, fake_memory_factory):
@@ -474,7 +489,9 @@ class Store:
         if shared:
             self.scope_name = "shared"
             self.dir = shared_memory_dir()
-            self.scope_kwargs: dict[str, str] = {"app_id": "hermes-shared"}
+            # mem0 OSS has no app_id; the shared pool is a virtual agent.
+            # Filesystem isolation (separate dir) is the primary safety boundary.
+            self.scope_kwargs: dict[str, str] = {"agent_id": "hermes-shared"}
         else:
             if profile is None:
                 raise ValueError("Store requires either profile=<name> or shared=True")
@@ -524,6 +541,7 @@ class Store:
         return self._mem
 
     def add(self, text: str, *, user_id: str | None = None, meta: dict[str, Any] | None = None) -> dict[str, Any]:
+        # mem0 v2 Memory.add takes scope IDs as top-level kwargs.
         kwargs: dict[str, Any] = dict(self.scope_kwargs)
         if user_id:
             kwargs["user_id"] = user_id
@@ -550,7 +568,8 @@ class Store:
             con.close()
 
     def search(self, q: str, *, limit: int = 5) -> list[dict[str, Any]]:
-        raw_result = self.mem.search(q, limit=limit, **self.scope_kwargs)
+        # mem0 v2 Memory.search uses top_k= and filters= (scope IDs go inside filters).
+        raw_result = self.mem.search(q, top_k=limit, filters=self.scope_kwargs)
         items = raw_result.get("results", []) if isinstance(raw_result, dict) else raw_result
         return [
             {
@@ -559,14 +578,13 @@ class Store:
                 "score": float(item.get("score", 0.0)),
                 "scope": self.scope_name,
                 "agent_id": self.scope_kwargs.get("agent_id"),
-                "app_id": self.scope_kwargs.get("app_id"),
                 "raw": False,
             }
             for item in items
         ]
 
     def list(self, *, limit: int = 20) -> list[dict[str, Any]]:
-        raw_result = self.mem.get_all(limit=limit, **self.scope_kwargs)
+        raw_result = self.mem.get_all(top_k=limit, filters=self.scope_kwargs)
         items = raw_result.get("results", []) if isinstance(raw_result, dict) else raw_result
         return [
             {
@@ -575,7 +593,6 @@ class Store:
                 "score": 0.0,
                 "scope": self.scope_name,
                 "agent_id": self.scope_kwargs.get("agent_id"),
-                "app_id": self.scope_kwargs.get("app_id"),
                 "raw": False,
             }
             for item in items
@@ -1197,17 +1214,20 @@ from mem0_memory.store import ExtractorError, Store
 
 
 class ExplodingMemory:
-    """Memory factory that always raises on add() (simulates LLM extractor failure)."""
+    """Memory factory that always raises on add() (simulates LLM extractor failure).
+
+    Mirrors mem0 v2 API: add() takes scope kwargs; search()/get_all() take top_k+filters.
+    """
     def __init__(self, config):
         self.config = config
 
-    def add(self, *_a, **_kw):
+    def add(self, messages, **_kw):
         raise RuntimeError("openai key missing")
 
-    def search(self, *_a, **_kw):
+    def search(self, query, *, top_k=20, filters=None, **_kw):
         return {"results": []}
 
-    def get_all(self, *_a, **_kw):
+    def get_all(self, *, top_k=20, filters=None, **_kw):
         return {"results": []}
 
 
@@ -1252,7 +1272,7 @@ Replace the existing `search` method body with:
 
 ```python
     def search(self, q: str, *, limit: int = 5) -> list[dict[str, Any]]:
-        raw_result = self.mem.search(q, limit=limit, **self.scope_kwargs)
+        raw_result = self.mem.search(q, top_k=limit, filters=self.scope_kwargs)
         items = raw_result.get("results", []) if isinstance(raw_result, dict) else raw_result
         out = [
             {
@@ -1261,7 +1281,6 @@ Replace the existing `search` method body with:
                 "score": float(item.get("score", 0.0)),
                 "scope": self.scope_name,
                 "agent_id": self.scope_kwargs.get("agent_id"),
-                "app_id": self.scope_kwargs.get("app_id"),
                 "raw": False,
             }
             for item in items
@@ -1285,7 +1304,6 @@ Replace the existing `search` method body with:
                 "score": 0.0,
                 "scope": self.scope_name,
                 "agent_id": self.scope_kwargs.get("agent_id"),
-                "app_id": self.scope_kwargs.get("app_id"),
                 "raw": True,
                 "ts": ts,
             }
@@ -1373,7 +1391,7 @@ def test_real_mem0_add_then_search(hermes_home):
         mem.add("vault root is /opt/vault", agent_id="seb")
     except Exception as e:
         pytest.skip(f"mem0 in this env requires a richer LLM stub: {e}")
-    results = mem.search("vault", agent_id="seb", limit=5)
+    results = mem.search("vault", top_k=5, filters={"agent_id": "seb"})
     items = results.get("results", []) if isinstance(results, dict) else results
     texts = [i.get("memory") or i.get("text") or "" for i in items]
     assert any("vault" in t for t in texts), f"expected 'vault' in results, got {texts}"

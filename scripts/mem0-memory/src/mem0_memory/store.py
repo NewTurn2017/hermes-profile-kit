@@ -98,6 +98,13 @@ class Store:
                 },
             }
 
+        embedder_provider = os.environ.get("MEM0_EMBEDDER_PROVIDER")
+        if embedder_provider:
+            embedder_config: dict[str, Any] = {}
+            if model := os.environ.get("MEM0_EMBEDDER_MODEL"):
+                embedder_config["model"] = model
+            cfg["embedder"] = {"provider": embedder_provider, "config": embedder_config}
+
         return cfg
 
     @property

@@ -34,3 +34,20 @@ def test_llm_api_key_and_model_env_override(hermes_home, monkeypatch, fake_memor
     cfg = Store(profile="seb", memory_factory=fake_memory_factory).config()
     assert cfg["llm"]["config"]["api_key"] == "sk-real"
     assert cfg["llm"]["config"]["model"] == "gpt-5.4-mini"
+
+
+def test_embedder_provider_env_injects_block(hermes_home, monkeypatch, fake_memory_factory):
+    monkeypatch.setenv("MEM0_EMBEDDER_PROVIDER", "fastembed")
+    monkeypatch.setenv("MEM0_EMBEDDER_MODEL", "BAAI/bge-small-en-v1.5")
+    cfg = Store(profile="seb", memory_factory=fake_memory_factory).config()
+    assert cfg["embedder"]["provider"] == "fastembed"
+    assert cfg["embedder"]["config"]["model"] == "BAAI/bge-small-en-v1.5"
+
+
+def test_embedder_provider_env_without_model(hermes_home, monkeypatch, fake_memory_factory):
+    """If only provider is set, leave model unset so mem0 picks its provider default."""
+    monkeypatch.delenv("MEM0_EMBEDDER_MODEL", raising=False)
+    monkeypatch.setenv("MEM0_EMBEDDER_PROVIDER", "huggingface")
+    cfg = Store(profile="seb", memory_factory=fake_memory_factory).config()
+    assert cfg["embedder"]["provider"] == "huggingface"
+    assert "model" not in cfg["embedder"]["config"]

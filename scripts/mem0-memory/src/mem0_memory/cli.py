@@ -182,7 +182,7 @@ def share_list_cmd(limit: int) -> None:
 @main.command("doctor")
 @click.option("--profile", required=False, help="If set, also check this profile's store")
 def doctor_cmd(profile: str | None) -> None:
-    checks: dict[str, bool] = {"mem0_import": False, "profile_dir": False, "sqlite_healthy": False}
+    checks: dict[str, bool] = {"mem0_import": False}
     try:
         __import__("mem0")
         checks["mem0_import"] = True
@@ -197,18 +197,22 @@ def doctor_cmd(profile: str | None) -> None:
         checks["profile_dir"] = d.is_dir()
         if checks["profile_dir"]:
             sqlite_path = d / "store.sqlite"
+            import sqlite3
             try:
-                import sqlite3
                 con = sqlite3.connect(sqlite_path)
-                con.execute("PRAGMA integrity_check").fetchone()
-                con.close()
-                checks["sqlite_healthy"] = True
+                try:
+                    row = con.execute("PRAGMA integrity_check").fetchone()
+                finally:
+                    con.close()
             except sqlite3.DatabaseError as e:
                 emit(err(2, "sqlite_unhealthy", str(e), hint="see README recovery section"))
                 raise SystemExit(2)
-    else:
-        checks["profile_dir"] = True
-        checks["sqlite_healthy"] = True
+            if not row or row[0] != "ok":
+                detail = row[0] if row else "no result"
+                emit(err(2, "sqlite_unhealthy", f"PRAGMA integrity_check: {detail}",
+                         hint="see README recovery section"))
+                raise SystemExit(2)
+            checks["sqlite_healthy"] = True
 
     emit(ok(checks=checks))
 

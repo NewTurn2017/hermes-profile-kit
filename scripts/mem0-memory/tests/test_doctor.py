@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
-
 import pytest
 from click.testing import CliRunner
 
@@ -51,4 +49,16 @@ def test_doctor_red_when_sqlite_corrupt(runner, hermes_home):
     result = runner.invoke(cli_mod.main, ["doctor", "--profile", "seb"])
     assert result.exit_code == 2
     payload = json.loads(result.output)
+    assert payload["ok"] is False
     assert payload["kind"] == "sqlite_unhealthy"
+
+
+def test_doctor_no_profile_omits_profile_checks(runner):
+    result = runner.invoke(cli_mod.main, ["doctor"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["checks"] == {"mem0_import": True}
+    # profile-specific keys must NOT be present when --profile is omitted
+    assert "profile_dir" not in payload["checks"]
+    assert "sqlite_healthy" not in payload["checks"]

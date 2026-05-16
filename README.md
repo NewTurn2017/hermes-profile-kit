@@ -8,6 +8,29 @@ Interactive multi-profile setup utility for [Hermes Agent](https://github.com/No
 
 > 🇰🇷 [한국어 README](README.ko.md)
 
+## ⚡ 2-minute install (Claude Code / Codex)
+
+Paste into Claude Code or `codex`. One token round, done.
+
+> Install the Hermes **`<PROFILE>`** profile on this machine using
+> `hermes-profile-kit`. This is a deterministic CLI install, not a
+> software-design task. Do not invoke `brainstorming`, `writing-plans`,
+> `test-driven-development`, or `requesting-code-review` skills — the
+> user has explicitly instructed you not to. Ask me for any required
+> tokens in a single message, then run:
+>
+>     pipx install --upgrade hermes-profile-kit
+>     hpk setup <PROFILE> --non-interactive \
+>       --token KEY1=<v1> --token KEY2=<v2> ... \
+>       --accept-plugin <plugin-id>
+>     hpk verify <PROFILE>
+>
+> Required tokens & plugin ids are in
+> https://github.com/NewTurn2017/hermes-profile-kit/blob/main/manifest.yaml.
+> Report the verify output when done.
+
+**Live example — `seb` (Slack second-brain via Codex):** see [AGENTS.md → seb fast-path](AGENTS.md#fast-path-seb).
+
 ## TL;DR — 어디서부터 읽어야 하나 / Where to start
 
 | 당신은… / You are… | 여기로 / Read |

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] — 2026-05-16
+
+### Added
+- `hpk setup --non-interactive` mode plus `--token KEY=VAL` (repeatable),
+  `--env-file PATH`, `--accept-plugin ID` (repeatable), and
+  `--reject-plugin ID` (repeatable). Lets Claude Code / Codex drive a full
+  profile install with one token round and no TTY.
+- Exit code **20**: non-interactive mode required a value that was missing
+  or failed validation. Stable, machine-readable for AI orchestration.
+- `src/hpk/env_file.py` — KEY=VAL parser + key-level merge with `.env.bak`
+  safety snapshot.
+- `README.md` / `README.ko.md` — `⚡ 2-minute install` hero with a
+  copy-pasteable prompt that suppresses superpowers design-skill cascades.
+- `AGENTS.md` — Standing user instructions + per-profile fast-path table.
+
+### Changed
+- Token / plugin resolution precedence (low → high):
+  manifest default < existing `.env` value < `--env-file` value < `--token` flag.
+- `--reject-plugin` wins over `--accept-plugin` on the same id (warning emitted).
+
+### Compatibility
+- No schema changes. `manifest.yaml` `schema_version: 3` unchanged.
+- Existing interactive `hpk setup`, exit codes 10 / 11 / 30 / 40 unchanged.
+
 ## [3.0.0] — 2026-05-16
 
 ### Added

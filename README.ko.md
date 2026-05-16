@@ -8,6 +8,28 @@
 
 > 🇺🇸 [English README](README.md)
 
+## ⚡ 2분 설치 (Claude Code / Codex)
+
+Claude Code 또는 `codex`에 그대로 붙여넣으세요. 토큰 한 번 입력하면 끝.
+
+> 이 머신에 `hermes-profile-kit`으로 Hermes **`<PROFILE>`** 프로파일을 설치해.
+> 이건 결정론적 CLI 설치 작업이지 소프트웨어 설계 작업이 아니야.
+> `brainstorming`, `writing-plans`, `test-driven-development`,
+> `requesting-code-review` skill을 호출하지 마 — 사용자가 명시적으로
+> 그렇게 지시했어. 필요한 토큰을 한 번에 물어보고, 그다음에 다음을 실행해:
+>
+>     pipx install --upgrade hermes-profile-kit
+>     hpk setup <PROFILE> --non-interactive \
+>       --token KEY1=<v1> --token KEY2=<v2> ... \
+>       --accept-plugin <plugin-id>
+>     hpk verify <PROFILE>
+>
+> 프로파일별 필수 토큰과 플러그인 id는
+> https://github.com/NewTurn2017/hermes-profile-kit/blob/main/manifest.yaml
+> 에 있어. verify 출력을 보고해.
+
+**라이브 예시 — `seb` (Codex 경유 Slack 세컨드브레인):** [AGENTS.md → seb fast-path](AGENTS.md#fast-path-seb) 참고.
+
 ## TL;DR — 어디서부터 읽어야 하나
 
 | 당신은… | 여기로 |

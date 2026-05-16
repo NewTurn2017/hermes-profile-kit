@@ -102,9 +102,27 @@ class Store:
         try:
             result = self.mem.add(text, **kwargs)
         except Exception as exc:
+            # Hard failure (network, auth, etc.): persist raw + bubble up.
             self._save_raw(text, meta)
             raise ExtractorError(str(exc)) from exc
-        return {"raw_result": result, "scope": self.scope_name}
+
+        # mem0 v2 swallows LLM extraction errors and returns empty results. Detect
+        # that case so the original text is still recoverable via raw_facts.
+        items = result.get("results", []) if isinstance(result, dict) else result
+        if not items and text.strip():
+            raw_id = self._save_raw(text, meta)
+            return {
+                "raw_result": result,
+                "scope": self.scope_name,
+                "extracted": False,
+                "raw_id": raw_id,
+            }
+        return {
+            "raw_result": result,
+            "scope": self.scope_name,
+            "extracted": True,
+            "raw_id": None,
+        }
 
     def _save_raw(self, text: str, meta: dict[str, Any] | None) -> int:
         import json

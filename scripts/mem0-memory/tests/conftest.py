@@ -68,3 +68,24 @@ def fake_memory_factory():
 
     factory.instances = instances  # type: ignore[attr-defined]
     return factory
+
+
+class SilentlyFailingMemory(FakeMemory):
+    """Mimics mem0 v2 behavior when LLM extraction fails: returns empty results,
+    does NOT raise."""
+
+    def add(self, messages: str, **kwargs: Any) -> dict[str, Any]:
+        return {"results": []}
+
+
+@pytest.fixture
+def silent_fail_memory_factory():
+    instances: list[SilentlyFailingMemory] = []
+
+    def factory(config: dict[str, Any]) -> SilentlyFailingMemory:
+        m = SilentlyFailingMemory(config)
+        instances.append(m)
+        return m
+
+    factory.instances = instances  # type: ignore[attr-defined]
+    return factory

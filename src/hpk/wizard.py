@@ -25,6 +25,29 @@ class HermesVersionTooOldError(PreflightError):
     pass
 
 
+class NonInteractiveMissingError(PreflightError):
+    """Required token value missing or invalid under --non-interactive."""
+
+    def __init__(self, missing: list[str], invalid: list[tuple[str, str]] | None = None) -> None:
+        invalid = invalid or []
+        parts: list[str] = []
+        if missing:
+            parts.append("missing required tokens: " + ", ".join(missing))
+        if invalid:
+            parts.append("invalid token values: " + ", ".join(f"{k} ({why})" for k, why in invalid))
+        super().__init__(
+            "; ".join(parts) + ". Re-run with --token KEY=VAL for each missing/invalid key."
+        )
+
+
+class UnknownTokenKeyError(PreflightError):
+    """`--token KEY=VAL` named a key the target profile does not declare."""
+
+
+class UnknownPluginIdError(PreflightError):
+    """`--accept-plugin`/`--reject-plugin` named an id not in recommended_plugins."""
+
+
 def _has_local_bin_on_path() -> bool:
     target = str(Path.home() / ".local" / "bin")
     return target in os.environ.get("PATH", "").split(os.pathsep)
@@ -101,29 +124,144 @@ def _collect_one(token_spec: TokenSpec, *, optional: bool) -> str | None:
     return token_spec.default  # return default instead of None
 
 
-def phase_b_tokens(profile: Profile) -> None:
+def phase_b_tokens(
+    profile: Profile,
+    *,
+    non_interactive: bool = False,
+    token_overrides: dict[str, str] | None = None,
+    env_file_values: dict[str, str] | None = None,
+) -> None:
     ui.step(f"[B] tokens — {profile.name}")
+    overrides = dict(token_overrides or {})
+    env_values = dict(env_file_values or {})
+
+    known_keys = {s.key for s in profile.tokens.required} | {s.key for s in profile.tokens.optional}
+    for src_name, src in (("--token", overrides), ("--env-file", env_values)):
+        unknown = sorted(set(src) - known_keys)
+        if unknown:
+            raise UnknownTokenKeyError(
+                f"{src_name}: unknown key(s) for profile {profile.name!r}: {', '.join(unknown)}. "
+                f"Valid: {', '.join(sorted(known_keys))}"
+            )
+
     home = profiles.profile_home(profile.name)
     env_path = home / ".env"
+
+    # Safety snapshot: if flags are about to mutate an existing .env, copy it to .env.bak first.
+    # Interactive runs keep their current behavior (no snapshot).
+    if env_path.exists() and (overrides or env_values):
+        profiles.atomic_write(
+            env_path.with_suffix(env_path.suffix + ".bak"),
+            env_path.read_text(),
+            mode=0o600,
+        )
+
+    missing: list[str] = []
+    invalid: list[tuple[str, str]] = []
+
     for spec in profile.tokens.required:
-        val = _collect_one(spec, optional=False)
-        if val:
+        val = _resolve_value(spec, overrides=overrides, env_values=env_values)
+        if val is not None:
+            handler = _handler_for(spec)
+            r = handler.validate(val)
+            if not r.ok:
+                invalid.append((spec.key, r.reason))
+                continue
             profiles.set_env_key(env_path, spec.key, val)
+            ui.ok(f"{spec.key} written")
+            continue
+        if non_interactive:
+            if spec.default is not None:
+                profiles.set_env_key(env_path, spec.key, spec.default)
+                ui.ok(f"{spec.key} written (manifest default)")
+            else:
+                missing.append(spec.key)
+            continue
+        # interactive fallback (existing behavior)
+        v = _collect_one(spec, optional=False)
+        if v:
+            profiles.set_env_key(env_path, spec.key, v)
             ui.ok(f"{spec.key} written")
         else:
             ui.warn(f"{spec.key} left as FILL_IN")
+
+    if non_interactive and (missing or invalid):
+        raise NonInteractiveMissingError(missing=missing, invalid=invalid)
+
     for spec in profile.tokens.optional:
-        val = _collect_one(spec, optional=True)
-        if val:
+        val = _resolve_value(spec, overrides=overrides, env_values=env_values)
+        if val is not None:
+            handler = _handler_for(spec)
+            r = handler.validate(val)
+            if not r.ok:
+                if non_interactive:
+                    invalid.append((spec.key, r.reason))
+                else:
+                    ui.warn(f"{spec.key} invalid ({r.reason}) — left as-is")
+                continue
             profiles.set_env_key(env_path, spec.key, val)
             ui.ok(f"{spec.key} written")
+            continue
+        if non_interactive:
+            continue  # leave FILL_IN, no error for optional
+        v = _collect_one(spec, optional=True)
+        if v:
+            profiles.set_env_key(env_path, spec.key, v)
+            ui.ok(f"{spec.key} written")
+
+    if non_interactive and invalid:
+        raise NonInteractiveMissingError(missing=[], invalid=invalid)
+
+
+def _resolve_value(
+    spec: TokenSpec,
+    *,
+    overrides: dict[str, str],
+    env_values: dict[str, str],
+) -> str | None:
+    """Precedence: --token (highest) > --env-file > manifest default > None."""
+    if spec.key in overrides:
+        return overrides[spec.key]
+    if spec.key in env_values:
+        return env_values[spec.key]
+    return None  # manifest default is applied later only under non-interactive
+
+
+def _handler_for(spec: TokenSpec):  # type: ignore[no-untyped-def]
+    return (
+        tokens.get_handler(provider=spec.provider, wizard=spec.wizard)
+        if spec.wizard
+        else tokens.get_handler(provider=spec.provider)
+    )
 
 
 def _ask_plugin(plugin_id: str, default: bool) -> bool:
     return bool(questionary.confirm(f"Enable plugin '{plugin_id}'?", default=default).ask())
 
 
-def phase_c_plugins(profile: Profile, plugins_catalog: dict[str, Plugin]) -> None:
+def phase_c_plugins(
+    profile: Profile,
+    plugins_catalog: dict[str, Plugin],
+    *,
+    non_interactive: bool = False,
+    accepted_plugins: set[str] | None = None,
+    rejected_plugins: set[str] | None = None,
+) -> None:
+    accepted = set(accepted_plugins or ())
+    rejected = set(rejected_plugins or ())
+
+    known_ids = {rp.id for rp in profile.recommended_plugins}
+    unknown_flagged = sorted((accepted | rejected) - known_ids)
+    if unknown_flagged:
+        raise UnknownPluginIdError(
+            f"unknown plugin id(s) for profile {profile.name!r}: {', '.join(unknown_flagged)}. "
+            f"Valid: {', '.join(sorted(known_ids)) or '(none)'}"
+        )
+
+    conflicts = accepted & rejected
+    for pid in sorted(conflicts):
+        ui.warn(f"plugin {pid}: both --accept-plugin and --reject-plugin given; reject wins")
+
     if not profile.recommended_plugins:
         return
     ui.step(f"[C] plugins — {profile.name}")
@@ -133,30 +271,52 @@ def phase_c_plugins(profile: Profile, plugins_catalog: dict[str, Plugin]) -> Non
             ui.warn(f"plugin {rp.id} not found in catalog — skipping")
             continue
 
+        decision = _decide_plugin(
+            rp_id=rp.id,
+            default=rp.default,
+            accepted=accepted,
+            rejected=rejected,
+            non_interactive=non_interactive,
+        )
+        if not decision:
+            ui.ok(f"plugin {rp.id} skipped")
+            continue
+
         # Kit-local helper: print install path, never exec hermes.
         if plugin.install_path and not plugin.verified_in_upstream:
-            if _ask_plugin(rp.id, rp.default):
-                ui.warn(
-                    f"plugin [bold]{rp.id}[/bold] is a kit-local helper. "
-                    f"Install manually: see [cyan]{plugin.install_path}/README.md[/cyan]"
-                )
-                if plugin.launchd_template:
-                    ui.console.print(f"  launchd template: {plugin.launchd_template}")
-            else:
-                ui.ok(f"plugin {rp.id} skipped by user")
+            ui.warn(
+                f"plugin [bold]{rp.id}[/bold] is a kit-local helper. "
+                f"Install manually: see [cyan]{plugin.install_path}/README.md[/cyan]"
+            )
+            if plugin.launchd_template:
+                ui.console.print(f"  launchd template: {plugin.launchd_template}")
             continue
 
         if not plugin.verified_in_upstream:
             ui.warn(f"plugin {rp.id} not verified — skipping")
-            continue
-        if not _ask_plugin(rp.id, rp.default):
-            ui.ok(f"plugin {rp.id} skipped by user")
             continue
         try:
             plugins_mod.run_plugin(plugin, profile=profile.name)
             ui.ok(f"plugin {rp.id} enabled")
         except plugins_mod.PluginExecError as e:
             ui.warn(f"plugin {rp.id} failed: {e}")
+
+
+def _decide_plugin(
+    *,
+    rp_id: str,
+    default: bool,
+    accepted: set[str],
+    rejected: set[str],
+    non_interactive: bool,
+) -> bool:
+    if rp_id in rejected:
+        return False
+    if rp_id in accepted:
+        return True
+    if non_interactive:
+        return default
+    return _ask_plugin(rp_id, default)
 
 
 def run_wizard(
@@ -166,6 +326,11 @@ def run_wizard(
     force: bool,
     skip_tokens: bool,
     skip_plugins: bool,
+    non_interactive: bool = False,
+    token_overrides: dict[str, str] | None = None,
+    env_file_values: dict[str, str] | None = None,
+    accepted_plugins: set[str] | None = None,
+    rejected_plugins: set[str] | None = None,
 ) -> None:
     preflight(manifest)
     selected = [p for p in manifest.profiles if not targets or p.name in targets]
@@ -173,6 +338,17 @@ def run_wizard(
         ui.header(f"profile {profile.name}")
         phase_a_base(profile, force=force)
         if not skip_tokens:
-            phase_b_tokens(profile)
+            phase_b_tokens(
+                profile,
+                non_interactive=non_interactive,
+                token_overrides=token_overrides,
+                env_file_values=env_file_values,
+            )
         if not skip_plugins:
-            phase_c_plugins(profile, manifest.plugins)
+            phase_c_plugins(
+                profile,
+                manifest.plugins,
+                non_interactive=non_interactive,
+                accepted_plugins=accepted_plugins,
+                rejected_plugins=rejected_plugins,
+            )

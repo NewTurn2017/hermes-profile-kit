@@ -107,6 +107,21 @@ def test_codex_auth_error_returns_502_with_hint(client):
     assert "codex login" in r.json()["detail"]["error"]["message"]
 
 
+def test_codex_non_auth_error_returns_502_with_stderr(client):
+    """Non-zero returncode without auth markers → 502 codex_error with stderr surfaced."""
+    mock = MagicMock()
+    mock.communicate.return_value = (b"", b"error: rate limited")
+    mock.returncode = 1
+    with patch("subprocess.Popen", return_value=mock):
+        r = client.post("/v1/chat/completions", json={
+            "model": "gpt-5.5",
+            "messages": [{"role": "user", "content": "hi"}],
+        })
+    assert r.status_code == 502
+    assert r.json()["detail"]["error"]["type"] == "codex_error"
+    assert "rate limited" in r.json()["detail"]["error"]["message"]
+
+
 def test_codex_not_found_returns_502(client):
     with patch("subprocess.Popen", side_effect=FileNotFoundError("codex not found")):
         r = client.post("/v1/chat/completions", json={

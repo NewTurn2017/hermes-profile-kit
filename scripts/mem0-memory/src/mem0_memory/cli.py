@@ -179,5 +179,39 @@ def share_list_cmd(limit: int) -> None:
     emit(ok(memories=results))
 
 
+@main.command("doctor")
+@click.option("--profile", required=False, help="If set, also check this profile's store")
+def doctor_cmd(profile: str | None) -> None:
+    checks: dict[str, bool] = {"mem0_import": False, "profile_dir": False, "sqlite_healthy": False}
+    try:
+        __import__("mem0")
+        checks["mem0_import"] = True
+    except ImportError as e:
+        emit(err(20, "mem0_import_failed", str(e),
+                 hint="cd scripts/mem0-memory && uv pip install -e ."))
+        raise SystemExit(20)
+
+    if profile:
+        from mem0_memory.paths import profile_memory_dir
+        d = profile_memory_dir(profile)
+        checks["profile_dir"] = d.is_dir()
+        if checks["profile_dir"]:
+            sqlite_path = d / "store.sqlite"
+            try:
+                import sqlite3
+                con = sqlite3.connect(sqlite_path)
+                con.execute("PRAGMA integrity_check").fetchone()
+                con.close()
+                checks["sqlite_healthy"] = True
+            except sqlite3.DatabaseError as e:
+                emit(err(2, "sqlite_unhealthy", str(e), hint="see README recovery section"))
+                raise SystemExit(2)
+    else:
+        checks["profile_dir"] = True
+        checks["sqlite_healthy"] = True
+
+    emit(ok(checks=checks))
+
+
 if __name__ == "__main__":
     main()

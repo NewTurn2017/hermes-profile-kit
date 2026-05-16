@@ -55,6 +55,7 @@ def test_add_requires_text(runner):
 def test_share_add_returns_ok_with_shared_scope(runner):
     result, payload = _invoke(runner, ["share-add", "--text", "global fact"])
     assert result.exit_code == 0
+    assert payload["ok"] is True
     assert payload["scope"] == "shared"
 
 
@@ -74,3 +75,19 @@ def test_add_meta_rejects_malformed(runner):
     assert result.exit_code == 1
     payload = json.loads(result.output)
     assert payload["kind"] == "bad_meta"
+
+
+def test_add_rejects_whitespace_only_text(runner):
+    result = runner.invoke(
+        cli_mod.main, ["add", "--profile", "seb", "--text", "   "]
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["kind"] == "missing_arg"
+
+
+def test_share_add_rejects_whitespace_only_text(runner):
+    result = runner.invoke(cli_mod.main, ["share-add", "--text", "\t \n"])
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["kind"] == "missing_arg"

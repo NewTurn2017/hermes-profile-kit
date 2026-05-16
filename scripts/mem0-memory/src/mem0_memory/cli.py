@@ -34,6 +34,15 @@ def _shared_store() -> Store:
     return Store(shared=True, memory_factory=_memory_factory)
 
 
+def _first_id(add_result: dict[str, Any]) -> str | None:
+    raw = add_result.get("raw_result") if isinstance(add_result, dict) else None
+    if isinstance(raw, dict):
+        items = raw.get("results") or []
+        if items:
+            return items[0].get("id")
+    return None
+
+
 @click.group()
 def main() -> None:
     """hpk-memory — per-profile + shared memory for hermes-profile-kit."""
@@ -54,8 +63,8 @@ def add_cmd(profile: str | None, text: str | None, meta: tuple[str, ...], scope:
     if not profile:
         emit(err(1, "missing_arg", "--profile is required for add"))
         raise SystemExit(1)
-    if not text:
-        emit(err(1, "missing_arg", "--text is required for add"))
+    if not text or not text.strip():
+        emit(err(1, "missing_arg", "--text is required for add (non-blank)"))
         raise SystemExit(1)
     try:
         meta_dict = _parse_meta(meta)
@@ -76,11 +85,11 @@ def add_cmd(profile: str | None, text: str | None, meta: tuple[str, ...], scope:
 
 
 @main.command("share-add")
-@click.option("--text", required=False)
-@click.option("--meta", multiple=True)
+@click.option("--text", required=False, help="Fact text to remember in the shared pool (required)")
+@click.option("--meta", multiple=True, help="key=value metadata, repeatable")
 def share_add_cmd(text: str | None, meta: tuple[str, ...]) -> None:
-    if not text:
-        emit(err(1, "missing_arg", "--text is required for share-add"))
+    if not text or not text.strip():
+        emit(err(1, "missing_arg", "--text is required for share-add (non-blank)"))
         raise SystemExit(1)
     try:
         meta_dict = _parse_meta(meta)
@@ -98,15 +107,6 @@ def share_add_cmd(text: str | None, meta: tuple[str, ...]) -> None:
     if meta_dict:
         payload["meta"] = meta_dict
     emit(ok(**payload))
-
-
-def _first_id(add_result: dict[str, Any]) -> str | None:
-    raw = add_result.get("raw_result") if isinstance(add_result, dict) else None
-    if isinstance(raw, dict):
-        items = raw.get("results") or []
-        if items:
-            return items[0].get("id")
-    return None
 
 
 if __name__ == "__main__":

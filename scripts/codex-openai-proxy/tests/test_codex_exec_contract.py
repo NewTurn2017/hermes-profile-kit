@@ -20,7 +20,14 @@ def test_codex_exec_returns_agent_message_event():
         timeout=120,
     )
     assert proc.returncode == 0, proc.stderr.decode(errors="replace")
-    events = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+    events = []
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            continue
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue  # match prod parser tolerance; downstream assert "agent_msgs" still catches a fully-broken CLI
     agent_msgs = [
         e for e in events
         if e.get("type") == "item.completed" and e.get("item", {}).get("type") == "agent_message"

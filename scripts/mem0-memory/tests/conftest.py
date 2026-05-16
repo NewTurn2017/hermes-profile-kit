@@ -1,7 +1,6 @@
 """Shared pytest fixtures for the mem0-memory plugin."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +17,8 @@ def hermes_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 class FakeMemory:
     """In-memory stand-in for mem0.Memory used by Store unit tests.
 
-    Records add() calls, returns deterministic search() results filtered by scope kwargs.
+    Mirrors the real mem0 v2 API: add() takes scope IDs as top-level kwargs;
+    search()/get_all() take top_k=int and filters=dict.
     """
 
     def __init__(self, config: dict[str, Any]) -> None:
@@ -32,17 +32,17 @@ class FakeMemory:
         self.added.append(rec)
         return {"results": [{"id": rec["id"], "memory": messages, "event": "ADD"}]}
 
-    def search(self, query: str, *, limit: int = 5, **kwargs: Any) -> dict[str, Any]:
-        scope_keys = {"user_id", "agent_id", "app_id", "run_id"}
-        scope = {k: v for k, v in kwargs.items() if k in scope_keys}
+    def search(self, query: str, *, top_k: int = 20, filters: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
+        scope_keys = {"user_id", "agent_id", "run_id"}
+        scope = {k: v for k, v in (filters or {}).items() if k in scope_keys}
         results: list[dict[str, Any]] = []
         for rec in self.added:
             if all(rec.get(k) == v for k, v in scope.items()):
                 results.append({"id": rec["id"], "memory": rec["messages"], "score": 0.9})
-        return {"results": results[:limit]}
+        return {"results": results[:top_k]}
 
-    def get_all(self, **kwargs: Any) -> dict[str, Any]:
-        return self.search("", limit=1000, **kwargs)
+    def get_all(self, *, top_k: int = 1000, filters: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
+        return self.search("", top_k=top_k, filters=filters)
 
 
 @pytest.fixture

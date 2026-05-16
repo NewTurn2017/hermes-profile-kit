@@ -12,8 +12,10 @@ def hermes_home() -> Path:
 
 
 def profile_memory_dir(profile: str) -> Path:
+    """Return the per-profile memory store path: <hermes_home>/profiles/<profile>/memory."""
     return hermes_home() / "profiles" / profile / "memory"
 
 
 def shared_memory_dir() -> Path:
+    """Return the cross-profile shared memory store path: <hermes_home>/shared/memory."""
     return hermes_home() / "shared" / "memory"

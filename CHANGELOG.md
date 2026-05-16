@@ -93,7 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AGENTS.md` playbook for LLM-agent-driven setup.
 - Korean `README.md` aimed at human operators.
 
-[Unreleased]: https://github.com/NewTurn2017/hermes-profile-kit/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/NewTurn2017/hermes-profile-kit/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v3.1.0
 [3.0.0]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v3.0.0
 [2.0.0]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v2.0.0
 [1.0.0]: https://github.com/NewTurn2017/hermes-profile-kit/releases/tag/v1.0.0

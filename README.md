@@ -124,6 +124,7 @@ hpk setup --skip-plugins   # base + tokens, skip plugin prompts
 | 0 | success |
 | 10 | hermes not installed |
 | 11 | hermes version < `min_hermes_version` |
+| 20 | non-interactive: required value missing or invalid |
 | 30 | other preflight error / verify found FILL_IN or failing doctor |
 | 40 | manifest invalid or unknown plugin id |
 

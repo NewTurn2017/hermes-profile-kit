@@ -10,7 +10,7 @@
 > default (`default: false` in `manifest.yaml`).
 
 Local OpenAI-compatible HTTP proxy. Translates `/v1/chat/completions` calls from
-Hermes' OpenAI adapter to `codex responses` CLI subprocess calls, reusing your
+Hermes' OpenAI adapter to `codex exec --json -` subprocess calls, reusing your
 existing Codex OAuth session. No separate OpenAI billing key needed.
 
 ## Prerequisites
@@ -60,12 +60,26 @@ Default: `gpt-5.5,gpt-5.4-mini`. Override: `CODEX_PROXY_MODELS=gpt-5.5,gpt-5.4-m
 
 ## CLI interface note
 
-The proxy calls `codex responses --model <name> --input-json -` and sends a
-JSON payload matching the [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses).
-If the codex CLI flags differ from this, update `_to_responses_payload()` and
-`_extract_content()` in `proxy.py` — the HTTP surface and tests are unchanged.
+The proxy calls `codex exec --skip-git-repo-check --ephemeral --json -m <model> -`
+and pipes the rendered prompt over stdin. Output is parsed as JSONL — events of
+type `item.completed` with `item.type == "agent_message"` are concatenated into
+the assistant content. Events of type `error` or `turn.failed` surface as HTTP
+502.
 
-Verify with: `codex responses --help`
+If a future codex CLI changes any of these contracts, update `_to_codex_exec_invocation`
+and `_parse_codex_jsonl_events` in `proxy.py` — the HTTP surface stays the same.
+
+Verify with: `codex exec --help` (look for `--json`, `--ephemeral`, `-m`).
+
+### Verifying against the real codex CLI
+
+The default test suite mocks `subprocess.Popen`. To assert our contract still
+holds against the installed codex CLI:
+
+    cd scripts/codex-openai-proxy
+    CODEX_PROXY_INTEGRATION=1 uv run pytest tests/test_codex_exec_contract.py -v
+
+Requires `codex` CLI logged in (`codex login`).
 
 ## Running tests
 

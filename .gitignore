@@ -34,3 +34,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 manifest.v1.yaml.bak
+uv.lock
+
+# Codex CLI session state (from local PoC / integration runs)
+.omx/

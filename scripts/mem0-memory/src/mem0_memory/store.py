@@ -8,6 +8,7 @@ primary safety boundary.
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any, Callable
@@ -75,7 +76,7 @@ class Store:
             con.close()
 
     def config(self) -> dict[str, Any]:
-        return {
+        cfg: dict[str, Any] = {
             "vector_store": {
                 "provider": "chroma",
                 "config": {
@@ -85,6 +86,19 @@ class Store:
             },
             "history_db_path": str(self.dir / "store.sqlite"),
         }
+
+        llm_base_url = os.environ.get("MEM0_LLM_BASE_URL")
+        if llm_base_url:
+            cfg["llm"] = {
+                "provider": "openai",
+                "config": {
+                    "model": os.environ.get("MEM0_LLM_MODEL", "gpt-5.5"),
+                    "openai_base_url": llm_base_url,
+                    "api_key": os.environ.get("MEM0_LLM_API_KEY", "sk-mem0-local-dummy"),
+                },
+            }
+
+        return cfg
 
     @property
     def mem(self) -> Any:

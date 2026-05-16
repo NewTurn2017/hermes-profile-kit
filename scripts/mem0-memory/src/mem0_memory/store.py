@@ -129,12 +129,17 @@ class Store:
                 "score": float(item.get("score", 0.0)),
                 "scope": self.scope_name,
                 "agent_id": self.scope_kwargs.get("agent_id"),
+                "app_id": None,
+                "ts": None,
                 "raw": False,
             }
             for item in items
         ]
-        out.extend(self._search_raw(q, limit=limit))
-        return out[:limit]
+        raw = self._search_raw(q, limit=limit)
+        if raw and len(out) >= limit:
+            # Honor the "query will still find it" promise: reserve one slot for raw.
+            return out[: max(0, limit - 1)] + [raw[0]]
+        return (out + raw)[:limit]
 
     def _search_raw(self, q: str, *, limit: int) -> list[dict[str, Any]]:
         con = sqlite3.connect(self.dir / "store.sqlite")
@@ -152,8 +157,9 @@ class Store:
                 "score": 0.0,
                 "scope": self.scope_name,
                 "agent_id": self.scope_kwargs.get("agent_id"),
-                "raw": True,
+                "app_id": None,
                 "ts": ts,
+                "raw": True,
             }
             for (rid, text, ts) in rows
         ]
@@ -168,6 +174,8 @@ class Store:
                 "score": 0.0,
                 "scope": self.scope_name,
                 "agent_id": self.scope_kwargs.get("agent_id"),
+                "app_id": None,
+                "ts": None,
                 "raw": False,
             }
             for item in items

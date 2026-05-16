@@ -69,3 +69,7 @@ unmatched 경로는 안전 기본값으로 APPROVE 취급.
 - exit code 처리: `0` 정상 사용 / `10` raw fallback 저장됨(사용자에게 "extractor 일시 장애로 원문만 보존" 한 줄 안내) / `20` 사용자에게 `hpk-memory doctor` 실행 안내 / 그 외 비-0은 메모리 없이 계속 진행하고 사용자에게 굳이 알리지 않는다.
 - stdout 이 JSON 이 아니거나 `ok` 필드 없으면 메모리 없이 계속 진행.
 - 매 턴마다 호출하지 않는다 — 명백히 회상/저장 의도가 있을 때만.
+
+> If `MEM0_LLM_BASE_URL=http://localhost:8765/v1` is set in the environment,
+> `hpk-memory` automatically routes fact extraction through `codex-openai-proxy`
+> — no OpenAI billing key required. See `scripts/mem0-memory/README.md` Modes section.

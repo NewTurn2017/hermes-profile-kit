@@ -36,6 +36,24 @@ hpk-memory doctor --profile seb
 # {"ok": true, "checks": {"mem0_import": true, "profile_dir": ..., "sqlite_healthy": ...}}
 ```
 
+## Modes (LLM + embedder)
+
+`hpk-memory` runs mem0 in one of three modes depending on env vars set before
+the CLI is invoked:
+
+| Mode | When to use | Env to set |
+|---|---|---|
+| **Proxy** (recommended, zero billing keys) | You have a Codex CLI OAuth session via `codex login` and run `codex-openai-proxy` on `:8765`. | `MEM0_LLM_BASE_URL=http://localhost:8765/v1` plus `MEM0_EMBEDDER_PROVIDER=fastembed` (install: `uv pip install -e ".[local-embedder]"`). |
+| **OpenAI default** | You have a real OpenAI billing key (`OPENAI_API_KEY`). | None — leave `MEM0_*` env unset; mem0 uses its built-in OpenAI defaults for both LLM and embedder. |
+| **Hybrid** | You want local embeddings but real OpenAI for fact extraction (or vice versa). | Mix and match — e.g. set `MEM0_EMBEDDER_PROVIDER=fastembed` only. |
+
+To verify which mode is active for the current shell:
+
+    uv run hpk-memory doctor
+
+The output's `checks.llm_mode` and `checks.embedder_mode` fields say `proxy` or
+`openai-default` (or the embedder provider name).
+
 ## Usage
 
 ```bash

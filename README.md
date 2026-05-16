@@ -21,7 +21,7 @@ Paste into Claude Code or `codex`. One token round, done.
 >
 >     pipx install --upgrade hermes-profile-kit
 >     hpk setup <PROFILE> --non-interactive \
->       --token KEY1=<v1> --token KEY2=<v2> ... \
+>       --token KEY1=VALUE1 --token KEY2=VALUE2 ... \
 >       --accept-plugin <plugin-id>
 >     hpk verify <PROFILE>
 >
@@ -43,7 +43,7 @@ Paste into Claude Code or `codex`. One token round, done.
 
 ```yaml
 package: hermes-profile-kit
-version: 3.0.0
+version: 3.1.0
 schema_version: 3
 language: python>=3.10
 cli_entrypoint: hpk

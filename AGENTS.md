@@ -16,7 +16,7 @@ When a user asks you to install a profile from this kit:
    `src/hpk/` unless the user reports a specific error.
 3. Read **this file** + the `tokens.required` section of `manifest.yaml`
    for the target profile. That's enough.
-4. Ask the user for required tokens in **one** message, then run
+4. Ask the user for required tokens in **one** message. (Optional tokens listed in the per-profile table can be skipped for the 2-minute path or offered separately if the user wants them.) Then run
    `hpk setup <profile> --non-interactive --token KEY=VAL ... --accept-plugin ID`.
 5. Finish with `hpk verify <profile>` and report.
 
@@ -38,13 +38,18 @@ hpk verify seb
 
 ## Fast-paths: other profiles
 
-| Profile | Required tokens (ask user) | Plugins to accept |
-|---|---|---|
-| `coder` | `ANTHROPIC_API_KEY` | — |
-| `assistant` | `ANTHROPIC_API_KEY` | `honcho-memory` |
-| `research` | `ANTHROPIC_API_KEY` | `honcho-memory`, `brave-search-tool` |
-| `community-bot` | `ANTHROPIC_API_KEY` | — |
-| `seb` | 3× `SLACK_*` | `codex-openai-proxy` |
+| Profile | Required tokens (ask user) | Optional tokens (offer to user) | Plugins to accept |
+|---|---|---|---|
+| `coder` | `ANTHROPIC_API_KEY` | — | — |
+| `assistant` | `ANTHROPIC_API_KEY` | `TELEGRAM_BOT_TOKEN` | `honcho-memory` |
+| `research` | `ANTHROPIC_API_KEY` | `BRAVE_SEARCH_API_KEY`, `EXA_API_KEY` | `honcho-memory`, `brave-search-tool` |
+| `community-bot` | `ANTHROPIC_API_KEY` | `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN` | — |
+| `seb` | 3× `SLACK_*` (see fast-path above) | `JINA_API_KEY` | `codex-openai-proxy` |
+
+> Where the table says `seb: 3× SLACK_* (see fast-path above)`, the
+> `OPENAI_BASE_URL` / `OPENAI_API_KEY` required tokens have manifest
+> defaults that the `--non-interactive` mode applies automatically; the
+> user only needs to provide the three Slack tokens.
 
 ## Single command (interactive, human-driven)
 

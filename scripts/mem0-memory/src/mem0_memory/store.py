@@ -120,10 +120,9 @@ class Store:
             con.close()
 
     def search(self, q: str, *, limit: int = 5) -> list[dict[str, Any]]:
-        # mem0 v2 Memory.search uses top_k= and filters= (scope IDs go inside filters).
         raw_result = self.mem.search(q, top_k=limit, filters=self.scope_kwargs)
         items = raw_result.get("results", []) if isinstance(raw_result, dict) else raw_result
-        return [
+        out = [
             {
                 "id": item.get("id"),
                 "text": item.get("memory") or item.get("text") or "",
@@ -133,6 +132,30 @@ class Store:
                 "raw": False,
             }
             for item in items
+        ]
+        out.extend(self._search_raw(q, limit=limit))
+        return out[:limit]
+
+    def _search_raw(self, q: str, *, limit: int) -> list[dict[str, Any]]:
+        con = sqlite3.connect(self.dir / "store.sqlite")
+        try:
+            rows = con.execute(
+                "SELECT id, text, ts FROM raw_facts WHERE text LIKE ? ORDER BY ts DESC LIMIT ?",
+                (f"%{q}%", limit),
+            ).fetchall()
+        finally:
+            con.close()
+        return [
+            {
+                "id": f"raw_{rid}",
+                "text": text,
+                "score": 0.0,
+                "scope": self.scope_name,
+                "agent_id": self.scope_kwargs.get("agent_id"),
+                "raw": True,
+                "ts": ts,
+            }
+            for (rid, text, ts) in rows
         ]
 
     def list(self, *, limit: int = 20) -> list[dict[str, Any]]:

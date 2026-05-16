@@ -193,7 +193,7 @@ def merge_into_env(target: Path, values: dict[str, str]) -> None:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pytest tests/test_env_file.py -v`
-Expected: 7 passed.
+Expected: 8 passed.
 
 - [ ] **Step 5: Lint + type-check**
 

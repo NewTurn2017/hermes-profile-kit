@@ -134,3 +134,109 @@ def test_chat_completions_streaming_returns_sse(client):
     first = json.loads(data_lines[0][6:])
     assert first["object"] == "chat.completion.chunk"
     assert "streamed content" in first["choices"][0]["delta"]["content"]
+
+
+# ── Translation helpers: _to_codex_exec_invocation ────────────────────────────
+
+def test_to_codex_exec_invocation_single_user_message():
+    from proxy import _to_codex_exec_invocation
+    args, stdin = _to_codex_exec_invocation({
+        "model": "gpt-5.5",
+        "messages": [{"role": "user", "content": "hello"}],
+    })
+    assert args == ["--skip-git-repo-check", "--ephemeral", "--json", "-m", "gpt-5.5", "-"]
+    assert stdin == "[user]\nhello"
+
+
+def test_to_codex_exec_invocation_system_plus_user():
+    from proxy import _to_codex_exec_invocation
+    _, stdin = _to_codex_exec_invocation({
+        "model": "gpt-5.5",
+        "messages": [
+            {"role": "system", "content": "Respond as JSON."},
+            {"role": "user", "content": "extract facts"},
+        ],
+    })
+    assert stdin == "[system]\nRespond as JSON.\n\n[user]\nextract facts"
+
+
+def test_to_codex_exec_invocation_strips_response_format_and_tools():
+    """response_format / tools have no codex exec equivalent — drop them silently."""
+    from proxy import _to_codex_exec_invocation
+    args, stdin = _to_codex_exec_invocation({
+        "model": "gpt-5.5",
+        "messages": [{"role": "user", "content": "x"}],
+        "response_format": {"type": "json_object"},
+        "tools": [{"type": "function", "function": {"name": "f"}}],
+    })
+    # Just verify no exception; payload is the same as without those fields.
+    assert "-m" in args and "gpt-5.5" in args
+
+
+def test_to_codex_exec_invocation_flattens_multipart_content():
+    from proxy import _to_codex_exec_invocation
+    _, stdin = _to_codex_exec_invocation({
+        "model": "gpt-5.5",
+        "messages": [{"role": "user", "content": [
+            {"type": "text", "text": "part A"},
+            {"type": "text", "text": "part B"},
+        ]}],
+    })
+    assert stdin == "[user]\npart A part B"
+
+
+# ── Parser: _parse_codex_jsonl_events ─────────────────────────────────────────
+
+def test_parse_codex_jsonl_events_extracts_agent_text():
+    from proxy import _parse_codex_jsonl_events
+    stdout = b'\n'.join([
+        b'{"type":"thread.started","thread_id":"x"}',
+        b'{"type":"turn.started"}',
+        b'{"type":"item.completed","item":{"id":"i0","type":"agent_message","text":"hello world"}}',
+        b'{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":2}}',
+    ])
+    text, error = _parse_codex_jsonl_events(stdout)
+    assert text == "hello world"
+    assert error is None
+
+
+def test_parse_codex_jsonl_events_concatenates_multiple_messages():
+    from proxy import _parse_codex_jsonl_events
+    stdout = b'\n'.join([
+        b'{"type":"item.completed","item":{"id":"a","type":"agent_message","text":"first."}}',
+        b'{"type":"item.completed","item":{"id":"b","type":"agent_message","text":" second."}}',
+    ])
+    text, error = _parse_codex_jsonl_events(stdout)
+    assert text == "first. second."
+    assert error is None
+
+
+def test_parse_codex_jsonl_events_surfaces_error_event():
+    from proxy import _parse_codex_jsonl_events
+    stdout = b'\n'.join([
+        b'{"type":"thread.started"}',
+        b'{"type":"error","message":"boom"}',
+    ])
+    text, error = _parse_codex_jsonl_events(stdout)
+    assert text == ""
+    assert "boom" in error
+
+
+def test_parse_codex_jsonl_events_surfaces_turn_failed():
+    from proxy import _parse_codex_jsonl_events
+    stdout = b'{"type":"turn.failed","error":{"message":"rate limited"}}\n'
+    text, error = _parse_codex_jsonl_events(stdout)
+    assert error is not None
+    assert "rate limited" in error
+
+
+def test_parse_codex_jsonl_events_ignores_malformed_lines():
+    from proxy import _parse_codex_jsonl_events
+    stdout = b'\n'.join([
+        b'not json at all',
+        b'{"type":"item.completed","item":{"id":"a","type":"agent_message","text":"ok"}}',
+        b'',
+    ])
+    text, error = _parse_codex_jsonl_events(stdout)
+    assert text == "ok"
+    assert error is None

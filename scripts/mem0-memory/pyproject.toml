@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-mem0-memory"
+version = "0.1.0"
+description = "Kit-local mem0 store for per-profile + shared memory (hermes-profile-kit)"
+requires-python = ">=3.11"
+dependencies = [
+    "mem0ai>=0.1.0",
+    "click>=8.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+hpk-memory = "mem0_memory.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"

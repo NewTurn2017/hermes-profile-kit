@@ -127,7 +127,7 @@ def _merge_dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 @main.command("query")
-@click.option("--profile", required=False, help="Source profile (required)")
+@click.option("--profile", required=False, help="Source profile (required, even with --scope shared)")
 @click.option("--q", required=False, help="Search query (required)")
 @click.option("--scope", default="all", help="profile|shared|all (default: all)")
 @click.option("--limit", default=5, type=int, help="Max results (default: 5)")
@@ -151,7 +151,7 @@ def query_cmd(profile: str | None, q: str | None, scope: str, limit: int) -> Non
 
 
 @main.command("list")
-@click.option("--profile", required=False, help="Source profile (required)")
+@click.option("--profile", required=False, help="Source profile (required, even with --scope shared)")
 @click.option("--scope", default="all", help="profile|shared|all (default: all)")
 @click.option("--limit", default=20, type=int, help="Max results (default: 20)")
 def list_cmd(profile: str | None, scope: str, limit: int) -> None:
@@ -166,7 +166,10 @@ def list_cmd(profile: str | None, scope: str, limit: int) -> None:
         results.extend(_store_for_profile(profile).list(limit=limit))
     if scope in ("shared", "all"):
         results.extend(_shared_store().list(limit=limit))
-    emit(ok(memories=results[:limit]))
+    # Profile-first dedupe (list has no scores; preserves concat order).
+    # Known limitation: when profile has >= limit items, shared items may be starved.
+    deduped = _merge_dedupe(results)
+    emit(ok(memories=deduped[:limit]))
 
 
 @main.command("share-list")

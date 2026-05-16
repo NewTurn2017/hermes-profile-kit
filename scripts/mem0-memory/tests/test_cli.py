@@ -176,3 +176,22 @@ def test_share_list(runner):
     assert result.exit_code == 0
     texts = [m["text"] for m in payload["memories"]]
     assert {"g1", "g2"} <= set(texts)
+
+
+def test_list_scope_all_includes_shared(runner):
+    runner.invoke(cli_mod.main, ["share-add", "--text", "shared-only fact"])
+    runner.invoke(cli_mod.main, ["add", "--profile", "seb", "--text", "seb-only fact"])
+    result, payload = _invoke(runner, ["list", "--profile", "seb", "--scope", "all"])
+    assert result.exit_code == 0
+    texts = {m["text"] for m in payload["memories"]}
+    assert "seb-only fact" in texts
+    assert "shared-only fact" in texts
+
+
+def test_list_dedupes_duplicate_text_across_scopes(runner):
+    # Same fact text added to both profile and shared; list should return it once.
+    runner.invoke(cli_mod.main, ["add", "--profile", "seb", "--text", "same fact"])
+    runner.invoke(cli_mod.main, ["share-add", "--text", "same fact"])
+    result, payload = _invoke(runner, ["list", "--profile", "seb", "--scope", "all"])
+    texts = [m["text"] for m in payload["memories"]]
+    assert texts.count("same fact") == 1

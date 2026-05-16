@@ -38,14 +38,71 @@ def main(ctx: click.Context) -> None:
 @click.option("--force", is_flag=True, help="Overwrite SOUL.md/config.yaml even if present.")
 @click.option("--skip-tokens", is_flag=True)
 @click.option("--skip-plugins", is_flag=True)
+@click.option(
+    "--token",
+    "tokens_kv",
+    multiple=True,
+    metavar="KEY=VAL",
+    help="Inject a token value without prompting. Repeatable.",
+)
+@click.option(
+    "--env-file",
+    "env_file_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Load KEY=VAL lines (# comments allowed). --token values take precedence.",
+)
+@click.option(
+    "--accept-plugin",
+    "accept_plugins",
+    multiple=True,
+    metavar="ID",
+    help="Force-enable a recommended plugin. Repeatable.",
+)
+@click.option(
+    "--reject-plugin",
+    "reject_plugins",
+    multiple=True,
+    metavar="ID",
+    help="Force-skip a recommended plugin. Repeatable. Beats --accept-plugin on conflict.",
+)
+@click.option(
+    "--non-interactive",
+    is_flag=True,
+    help="Fail with exit 20 instead of prompting when a required value is missing.",
+)
 def setup(
     profile: tuple[str, ...],
     force: bool,
     skip_tokens: bool,
     skip_plugins: bool,
+    tokens_kv: tuple[str, ...],
+    env_file_path: Path | None,
+    accept_plugins: tuple[str, ...],
+    reject_plugins: tuple[str, ...],
+    non_interactive: bool,
 ) -> None:
-    """Interactive multi-profile setup."""
+    """Interactive multi-profile setup. See README's '2-minute install' for non-interactive use."""
     manifest = _load()
+
+    token_overrides: dict[str, str] = {}
+    for kv in tokens_kv:
+        if "=" not in kv:
+            ui.err(f"--token expects KEY=VAL, got: {kv!r}")
+            sys.exit(40)
+        key, _, val = kv.partition("=")
+        token_overrides[key] = val
+
+    env_file_values: dict[str, str] = {}
+    if env_file_path is not None:
+        from hpk.env_file import EnvFileParseError, load_env_file
+
+        try:
+            env_file_values = load_env_file(env_file_path)
+        except EnvFileParseError as e:
+            ui.err(str(e))
+            sys.exit(40)
+
     try:
         wizard.run_wizard(
             manifest,
@@ -53,6 +110,11 @@ def setup(
             force=force,
             skip_tokens=skip_tokens,
             skip_plugins=skip_plugins,
+            non_interactive=non_interactive,
+            token_overrides=token_overrides,
+            env_file_values=env_file_values,
+            accepted_plugins=set(accept_plugins),
+            rejected_plugins=set(reject_plugins),
         )
     except wizard.HermesNotInstalledError as e:
         ui.err(str(e))
@@ -60,6 +122,12 @@ def setup(
     except wizard.HermesVersionTooOldError as e:
         ui.err(str(e))
         sys.exit(11)
+    except wizard.NonInteractiveMissingError as e:
+        ui.err(str(e))
+        sys.exit(20)
+    except (wizard.UnknownTokenKeyError, wizard.UnknownPluginIdError) as e:
+        ui.err(str(e))
+        sys.exit(40)
     except wizard.PreflightError as e:
         ui.err(str(e))
         sys.exit(30)

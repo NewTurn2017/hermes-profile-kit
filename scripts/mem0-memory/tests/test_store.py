@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from mem0_memory.paths import profile_memory_dir, shared_memory_dir
-from mem0_memory.store import ExtractorError, Store
+from mem0_memory.store import Store
 
 
 def test_profile_store_uses_profile_dir(hermes_home, fake_memory_factory):
@@ -94,3 +94,17 @@ def test_raw_facts_table_present(hermes_home, fake_memory_factory):
     ).fetchall()
     con.close()
     assert rows == [("raw_facts",)]
+
+
+def test_store_requires_profile_or_shared(hermes_home, fake_memory_factory):
+    with pytest.raises(ValueError, match="profile=<name> or shared=True"):
+        Store(memory_factory=fake_memory_factory)
+
+
+def test_collection_name_distinguishes_profiles(hermes_home, fake_memory_factory):
+    seb = Store(profile="seb", memory_factory=fake_memory_factory)
+    assistant = Store(profile="assistant", memory_factory=fake_memory_factory)
+    shared = Store(shared=True, memory_factory=fake_memory_factory)
+    assert seb.config()["vector_store"]["config"]["collection_name"] == "hermes_profile_seb"
+    assert assistant.config()["vector_store"]["config"]["collection_name"] == "hermes_profile_assistant"
+    assert shared.config()["vector_store"]["config"]["collection_name"] == "hermes_shared"

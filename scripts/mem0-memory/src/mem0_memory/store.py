@@ -35,18 +35,21 @@ class Store:
         shared: bool = False,
         memory_factory: MemoryFactory | None = None,
     ) -> None:
+        self.dir: Path
         if shared:
             self.scope_name = "shared"
             self.dir = shared_memory_dir()
             # mem0 OSS has no app_id; the shared pool is a virtual agent.
             # Filesystem isolation (separate dir) is the primary safety boundary.
             self.scope_kwargs: dict[str, str] = {"agent_id": "hermes-shared"}
+            self._collection_name = "hermes_shared"
         else:
             if profile is None:
                 raise ValueError("Store requires either profile=<name> or shared=True")
             self.scope_name = "profile"
             self.dir = profile_memory_dir(profile)
             self.scope_kwargs = {"agent_id": profile}
+            self._collection_name = f"hermes_profile_{profile}"
 
         self.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.dir.chmod(0o700)
@@ -76,7 +79,7 @@ class Store:
             "vector_store": {
                 "provider": "chroma",
                 "config": {
-                    "collection_name": f"hermes_{self.scope_name}",
+                    "collection_name": self._collection_name,
                     "path": str(self.dir / "chroma"),
                 },
             },
@@ -92,7 +95,7 @@ class Store:
     def add(self, text: str, *, user_id: str | None = None, meta: dict[str, Any] | None = None) -> dict[str, Any]:
         # mem0 v2 Memory.add takes scope IDs as top-level kwargs.
         kwargs: dict[str, Any] = dict(self.scope_kwargs)
-        if user_id:
+        if user_id is not None:
             kwargs["user_id"] = user_id
         if meta:
             kwargs["metadata"] = meta

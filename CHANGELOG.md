@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.1] — 2026-05-17
+
+### Added
+- `codex-openai-proxy` 0.2.0: migrated to today's `codex exec --json -` CLI. The old `codex responses --input-json` invocation was broken against `codex-cli >= 0.130`; tests now include a gated `CODEX_PROXY_INTEGRATION=1` contract check so future CLI drift surfaces immediately.
+- `mem0-memory` 0.2.0: `Store.config()` honors `MEM0_LLM_BASE_URL` / `MEM0_LLM_API_KEY` / `MEM0_LLM_MODEL` / `MEM0_EMBEDDER_PROVIDER` / `MEM0_EMBEDDER_MODEL` env vars, enabling true "zero external billing keys" mode when paired with `codex-openai-proxy` + a local `fastembed` model.
+- `mem0-memory` 0.2.0: new `[local-embedder]` extra (`uv pip install -e ".[local-embedder]"`) brings in `fastembed` for OpenAI-free embeddings.
+- `mem0-memory` 0.2.0: `hpk-memory doctor` now reports the active LLM / embedder mode (`proxy`, `openai-default`, or the provider name).
+- `scripts/mem0-memory/README.md`: new "Modes" section documenting proxy / OpenAI / hybrid configurations.
+- `profiles/seb/SOUL.md`: 1-line routing note covering the proxy mode.
+
+### Fixed
+- `mem0-memory` 0.2.0: `Store.add` no longer loses data on silent extraction failure. v3.2.0 relied on mem0 v2 raising on LLM errors, but mem0 v2 actually swallows them and returns `{"results": []}` — so the spec's "any add either becomes a fact OR a raw row" promise was broken when the LLM was misconfigured. Now `Store.add` inspects the result and falls back to `raw_facts` whenever extraction returns empty for non-empty input; the return dict gains `extracted: bool` and `raw_id: int | None` fields.
+- `codex-openai-proxy` 0.2.0: terminate `codex exec` as soon as `turn.completed` / `turn.failed` is seen on stdout. codex's agent loop can hang for tens of seconds after emitting the assistant message (cleanup / telemetry), causing mem0's OpenAI client to time out before the proxy returned. With early termination plus a 90s hard timeout, every successful agent turn returns in seconds and the silent-fail symptom from the v3.2.1 PoC is resolved.
+
+### Notes
+- v3.2.0 users with `OPENAI_API_KEY` set keep working unchanged — the env-driven config blocks are additive and absent envs leave mem0 on its built-in OpenAI defaults.
+- End-to-end PoC confirmation: `MEM0_LLM_BASE_URL=http://localhost:8765/v1 MEM0_EMBEDDER_PROVIDER=fastembed MEM0_EMBEDDER_MODEL=BAAI/bge-small-en-v1.5 uv run python /tmp/mem0_codex_poc.py` returned a real extracted-fact item (proxy → Codex CLI OAuth → fact extraction → Chroma → search), zero billing keys touched.
+
 ## [3.2.0] — 2026-05-16
 
 ### Added

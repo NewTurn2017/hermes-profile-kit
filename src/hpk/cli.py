@@ -152,13 +152,23 @@ def plugin_disable(profile: str, plugin_id: str) -> None:
 
 
 @main.command()
-@click.option("--dry-run", is_flag=True)
-def sync(dry_run: bool) -> None:
-    """Local upstream-drift check (CI does it daily). Calls scripts/regen_docs.py --check."""
-    del dry_run  # accepted but not yet wired through
+@click.option(
+    "--upstream",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Path to a local hermes-agent clone. Without it, sync prints guidance and exits.",
+)
+@click.option("--dry-run", is_flag=True, help="Run --check mode (no writes).")
+def sync(upstream: Path | None, dry_run: bool) -> None:
+    """Local upstream-drift check (CI does it daily). Requires an upstream clone."""
     import subprocess as _sp
 
-    cmd = [sys.executable, "scripts/regen_docs.py", "--check"]
+    if upstream is None:
+        ui.warn("hpk sync needs --upstream PATH (a local hermes-agent clone).")
+        ui.warn("CI's daily upstream-sync workflow does this automatically.")
+        sys.exit(0)
+    cmd = [sys.executable, "scripts/regen_docs.py", "--upstream", str(upstream)]
+    if dry_run:
+        cmd.append("--check")
     r = _sp.run(cmd)
     sys.exit(50 if r.returncode else 0)
 
